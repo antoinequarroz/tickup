@@ -8,6 +8,7 @@ import { Avatar, Button, Card, PageHeader } from "@/components/ui";
 import { useApp } from "@/lib/store";
 import { templateById } from "@/lib/templates";
 import { cn } from "@/lib/utils";
+import { plainText } from "@/lib/markdown";
 
 const ICON = { general: FolderKanban, media: Clapperboard, software: Code2 };
 
@@ -50,7 +51,7 @@ export default function ProjectsPage() {
                     </div>
                     <span className="rounded-md border border-line-strong px-1.5 py-px font-mono text-[10.5px] text-ink-2">{p.key}</span>
                   </div>
-                  {p.description && <p className="line-clamp-2 text-[13px] text-ink-2">{p.description}</p>}
+                  {p.description && <p className="line-clamp-2 text-[13px] text-ink-2">{plainText(p.description)}</p>}
                   <div className="mt-auto flex items-center gap-2 text-[12px] text-ink-3">
                     <Progress done={p.doneCount} total={p.issueCount} />
                     <span className="tabular">

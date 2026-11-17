@@ -11,6 +11,7 @@ import { useApp } from "@/lib/store";
 import { EPIC_STATES } from "@/lib/templates";
 import type { Epic, EpicState } from "@/lib/types";
 import { api, cn, shortDate } from "@/lib/utils";
+import { plainText } from "@/lib/markdown";
 
 /** Epics: the big pieces of a project, each with its tickets and its progress. The roadmap and Gantt will build on their dates. */
 export default function EpicsPage() {
@@ -64,7 +65,7 @@ function EpicCard({ epic, index, onEdit }: { epic: Epic; index: number; onEdit: 
         <Progress done={epic.doneCount} total={epic.issueCount} className="mt-1 size-5" />
         <button onClick={onEdit} className="min-w-0 flex-1 text-left">
           <h2 className="text-[15px] font-medium leading-tight hover:underline">{epic.name}</h2>
-          {epic.description && <p className="mt-1 line-clamp-2 text-[13px] text-ink-3">{epic.description}</p>}
+          {epic.description && <p className="mt-1 line-clamp-2 text-[13px] text-ink-3">{plainText(epic.description)}</p>}
         </button>
         <Picker label="État de l'epic" value={epic.state} onChange={(v) => v && setState(v as EpicState)} options={EPIC_STATES.map((s) => ({ value: s.value, label: s.label }))} align="end" className="shrink-0">
           <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", epic.state === "active" ? "bg-ink text-bg" : epic.state === "done" ? "border border-ink text-ink" : "bg-ink/[0.06] text-ink-3")}>{state.label}</span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, Ban, ChevronRight, GitBranch, GitCommitHorizontal, GitPullRequest, Copy, CornerLeftUp, Hash, Link2, Plus, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
 import { branchName } from "@/lib/github";
@@ -9,6 +9,7 @@ import type { Comment, GithubLink, Issue } from "@/lib/types";
 import { api, cn, relative } from "@/lib/utils";
 import { AssigneeField, DueField, EpicField, LabelsField, PriorityField, SprintField, StartField, StatusField, TypeField } from "./fields";
 import { PriorityIcon, StatusIcon } from "./icons";
+import { Markdown } from "./markdown";
 import { Picker } from "./picker";
 import { useProjectCtx } from "./project-context";
 import { Avatar, Button } from "./ui";
@@ -273,21 +274,116 @@ function Title({ issue, onSave }: { issue: Issue; onSave: (title: string) => voi
   );
 }
 
+/** The nearest ancestor that scrolls, to keep the reader's place when the view changes. */
+function scroller(el: HTMLElement | null): HTMLElement | null {
+  for (let at = el?.parentElement ?? null; at; at = at.parentElement) if (/(auto|scroll)/.test(getComputedStyle(at).overflowY)) return at;
+  return null;
+}
+
+/** Where a click in the formatted text falls in the Markdown source, roughly: the clicked words, found in the source. */
+function caretFor(x: number, y: number, source: string): number {
+  const doc = document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null };
+  const pos = doc.caretPositionFromPoint?.(x, y) ?? (() => {
+    const r = document.caretRangeFromPoint?.(x, y);
+    return r ? { offsetNode: r.startContainer, offset: r.startOffset } : null;
+  })();
+  const node = pos?.offsetNode;
+  if (!node || node.nodeType !== Node.TEXT_NODE) return source.length;
+  const piece = node.textContent ?? "";
+  // A few words around the click are enough to find the spot, and survive the Markdown marks.
+  const before = piece.slice(Math.max(0, pos.offset - 24), pos.offset);
+  const after = piece.slice(pos.offset, pos.offset + 24);
+  const probe = before + after;
+  const at = probe.trim() ? source.indexOf(probe) : -1;
+  if (at >= 0) return at + before.length;
+  const start = before.trim() ? source.indexOf(before) : -1;
+  return start >= 0 ? start + before.length : source.length;
+}
+
 function Description({ issue, onSave }: { issue: Issue; onSave: (description: string) => void }) {
   const [value, setValue] = useState(issue.description);
+  // Read formatted, edit as text. An empty description stays a text field, ready to type in.
+  const [editing, setEditing] = useState(false);
   const ref = useAutosize(value);
+  const view = useRef<HTMLDivElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const restore = useRef<{ caret: number; scroller: HTMLElement | null; top: number } | null>(null);
+  const backToButton = useRef(false);
+  const clickTimer = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (document.activeElement !== ref.current) setValue(issue.description);
   }, [issue.description, ref]);
+  // Another ticket opened in the same panel starts in reading.
+  useEffect(() => setEditing(false), [issue.id]);
+  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const r = restore.current;
+    if (editing && el && r) {
+      restore.current = null;
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(r.caret, r.caret);
+      if (r.scroller) r.scroller.scrollTop = r.top;
+    } else if (!editing && backToButton.current) {
+      backToButton.current = false;
+      editButton.current?.focus();
+    }
+  }, [editing, ref]);
+
+  const edit = (caret: number) => {
+    const box = scroller(view.current);
+    restore.current = { caret, scroller: box, top: box?.scrollTop ?? 0 };
+    setEditing(true);
+  };
+
+  if (!editing && value.trim())
+    return (
+      <div className="group/desc relative mt-3">
+        <div
+          ref={view}
+          onClick={(e) => {
+            // A link opens; a selection is for copying; a double click selects a word.
+            if ((e.target as HTMLElement).closest("a") || e.detail > 1) {
+              window.clearTimeout(clickTimer.current);
+              return;
+            }
+            const { clientX, clientY } = e;
+            window.clearTimeout(clickTimer.current);
+            clickTimer.current = window.setTimeout(() => {
+              if (!window.getSelection()?.toString()) edit(caretFor(clientX, clientY, value));
+            }, 220);
+          }}
+          className="-mx-2 min-h-[90px] cursor-text rounded-[8px] px-2 py-1 hover:bg-surface-2/60"
+        >
+          <Markdown text={value} className="text-[14px] leading-relaxed text-ink-2" />
+        </div>
+        <button
+          ref={editButton}
+          type="button"
+          onClick={() => edit(value.length)}
+          className="absolute -top-1 right-0 rounded-[6px] border border-line bg-surface px-2 py-0.5 text-[11.5px] text-ink-3 opacity-0 group-hover/desc:opacity-100 hover:text-ink focus-visible:opacity-100"
+        >
+          Modifier
+        </button>
+      </div>
+    );
   return (
     <textarea
       ref={ref}
       value={value}
+      onFocus={() => setEditing(true)}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => value !== issue.description && onSave(value)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") backToButton.current = true;
+      }}
+      onBlur={() => {
+        if (value !== issue.description) onSave(value);
+        setEditing(false);
+      }}
       placeholder="Ajoute une description, des liens, une checklist en Markdown…"
       aria-label="Description"
-      className="mt-3 min-h-[90px] w-full resize-none bg-transparent text-[14px] leading-relaxed text-ink-2 outline-none placeholder:text-ink-3"
+      className="-mx-2 mt-3 block min-h-[90px] w-[calc(100%+16px)] resize-none rounded-[8px] bg-transparent px-2 py-1 text-[14px] leading-relaxed text-ink-2 outline-none placeholder:text-ink-3"
     />
   );
 }
@@ -566,7 +662,7 @@ function Comments({ issueId, meId }: { issueId: string; meId: string }) {
                     </button>
                   )}
                 </p>
-                <p className="mt-0.5 text-[13.5px] leading-relaxed whitespace-pre-wrap text-ink-2">{c.body}</p>
+                <Markdown text={c.body} className="mt-0.5 text-[13.5px] leading-relaxed text-ink-2" />
               </div>
             </div>
           );
