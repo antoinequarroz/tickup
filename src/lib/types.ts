@@ -131,7 +131,7 @@ export type ModuleInfo = {
 };
 
 /** Which links to the rest of the suite are configured (never the secrets themselves). */
-export type Integrations = { apiToken: boolean; webhook: boolean; github: boolean };
+export type Integrations = { apiToken: boolean; webhook: boolean; github: boolean; compte: boolean };
 
 /** A pull request, a commit or a branch on GitHub that names a ticket (WEB-12). */
 export type GithubLink = {

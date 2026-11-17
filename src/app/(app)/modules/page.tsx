@@ -62,6 +62,7 @@ export default function ModulesPage() {
         </p>
         <Card className="mx-auto mt-5 flex max-w-[860px] flex-col gap-3">
           <h2 className="text-[15px] font-medium">Échanges avec la suite</h2>
+          <Line on={integrations.compte} title="Compte Postmelo" text="On entre dans TickUp avec son Compte Postmelo, le même pour tous les outils. Le mot de passe TickUp reste en secours." off="Définis COMPTE_URL, COMPTE_CLIENT_SECRET (32 caractères au moins) et APP_URL dans .env pour l'activer." />
           <Line on={integrations.apiToken} title="API entrante" text="Les autres outils (Cordée, Hermes, Claude Code, un script) créent et lisent des tickets avec « Authorization: Bearer API_TOKEN »." off="Définis API_TOKEN (24 caractères au moins) dans .env pour l'ouvrir." />
           <Line on={integrations.webhook} title="Événements sortants" text="Chaque ticket créé, modifié, commenté ou supprimé est envoyé en JSON à SUITE_WEBHOOK_URL." off="Définis SUITE_WEBHOOK_URL dans .env pour prévenir un autre outil à chaque changement." />
           <Line

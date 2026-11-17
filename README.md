@@ -113,6 +113,25 @@ Ensuite :
 - Un ticket seulement mentionné est relié, jamais déplacé. Un ticket déjà terminé n'est pas rouvert.
 - Une PR venue d'un fork (quelqu'un d'extérieur au dépôt) est reliée mais ne déplace aucun ticket. Le secret vaut pour tous les projets de TickUp : ne branche que des dépôts où tu fais confiance à ceux qui peuvent pousser.
 
+## Se connecter avec le Compte Postmelo
+
+TickUp accepte le compte unique de la suite ([postmelo-compte](https://github.com/antoinequarroz/postmelo-compte), OpenID Connect). Dans `.env` :
+
+```env
+COMPTE_URL=https://compte.postmelo.ch
+COMPTE_CLIENT_SECRET=<32 caractères au moins>
+APP_URL=https://tickup.postmelo.ch
+```
+
+Côté compte : `TICKUP_URL` (la même adresse que `APP_URL`) et `TICKUP_CLIENT_SECRET` (le même secret). La page de connexion propose alors « Continuer avec mon Compte Postmelo », et « Utiliser mon mot de passe TickUp » reste en secours. Sans ces variables, rien ne change.
+
+- La personne est retrouvée par son identifiant, sinon par son e-mail : les comptes déjà créés dans TickUp gardent leurs tickets. Une personne inconnue est créée à sa première venue, sans mot de passe TickUp.
+- Le compte fait référence pour le nom, l'e-mail et le rôle. Seule exception : le dernier administrateur de TickUp le reste.
+- C'est le compte qui décide qui a accès à TickUp (page Admin du compte).
+- Se déconnecter de TickUp ferme aussi la session du compte.
+
+Le code : `src/server/compte.ts` (copie de `clients/compte.ts` du dépôt du compte) et `src/app/api/auth/compte`.
+
 ## Importer depuis Linear
 
 Dans Réglages → « Importer depuis Linear » (administrateurs). Crée une clé dans Linear → Settings → Security & access → Personal API keys, colle-la, choisis les équipes, puis « Importer ».
@@ -143,7 +162,6 @@ Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Cordée dont Ti
 
 ## La suite
 
-- Une seule connexion pour tous les outils de la suite.
 - Pièces jointes, mentions et notifications.
 
 ## Déploiement

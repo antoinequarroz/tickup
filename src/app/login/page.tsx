@@ -8,6 +8,9 @@ import { api } from "@/lib/utils";
 export default function LoginPage() {
   /** No account yet: the first person to arrive creates theirs and becomes admin. */
   const [setup, setSetup] = useState<boolean | null>(null);
+  /** The Compte Postmelo is plugged in: it is the way in, the TickUp password stays as a spare key. */
+  const [compte, setCompte] = useState(false);
+  const [spare, setSpare] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,8 +18,13 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api<{ needsSetup: boolean }>("/api/auth/status").then(
-      (s) => setSetup(s.needsSetup),
+    // Sent back here by the Compte Postmelo when the sign-in did not go through.
+    setError(new URLSearchParams(window.location.search).get("erreur") ?? "");
+    api<{ needsSetup: boolean; compte?: boolean }>("/api/auth/status").then(
+      (s) => {
+        setCompte(!!s.compte);
+        setSetup(s.needsSetup);
+      },
       () => setSetup(false),
     );
   }, []);
@@ -36,6 +44,30 @@ export default function LoginPage() {
 
   if (setup === null) return null;
 
+  if (compte && !spare)
+    return (
+      <div className="flex min-h-dvh items-center justify-center p-4">
+        <div className="rise w-full max-w-[360px] rounded-2xl border border-line bg-surface/80 p-7 shadow-card backdrop-blur-xl">
+          <Logo className="size-9" />
+          <h1 className="mt-5 font-display text-[30px] leading-none">TickUp</h1>
+          <p className="mt-2 text-[13px] text-ink-3">Connecte-toi avec ton Compte Postmelo, le même pour tous tes outils.</p>
+          {error && (
+            <p role="alert" className="mt-4 text-[12.5px] text-danger">
+              {error}
+            </p>
+          )}
+          <Button variant="primary" className="mt-6 w-full" onClick={() => (window.location.href = "/api/auth/compte/start")}>
+            Continuer avec mon Compte Postmelo
+          </Button>
+          {!setup && (
+            <button type="button" onClick={() => (setSpare(true), setError(""))} className="mt-4 w-full text-center text-[12.5px] text-ink-3 underline-offset-2 hover:text-ink hover:underline">
+              Utiliser mon mot de passe TickUp
+            </button>
+          )}
+        </div>
+      </div>
+    );
+
   return (
     <div className="flex min-h-dvh items-center justify-center p-4">
       <form onSubmit={submit} className="rise w-full max-w-[360px] rounded-2xl border border-line bg-surface/80 p-7 shadow-card backdrop-blur-xl">
@@ -51,6 +83,11 @@ export default function LoginPage() {
         <Button variant="primary" className="mt-4 w-full" disabled={busy || !email || !password || (setup && (!name.trim() || password.length < 10))}>
           {busy ? "Un instant…" : setup ? "Créer mon compte" : "Se connecter"}
         </Button>
+        {compte && (
+          <button type="button" onClick={() => (setSpare(false), setError(""))} className="mt-4 w-full text-center text-[12.5px] text-ink-3 underline-offset-2 hover:text-ink hover:underline">
+            Revenir au Compte Postmelo
+          </button>
+        )}
       </form>
     </div>
   );

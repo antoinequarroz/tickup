@@ -262,3 +262,41 @@ describe("sprints", () => {
     expect(roadmap[0].epics.map((e) => e.name)).toContain("Refonte");
   });
 });
+
+describe("Compte Postmelo", () => {
+  it("retrouve la personne par son identifiant, puis par son e-mail, et suit le nom et le rôle du compte", () => {
+    const { ana, bob } = setup();
+    expect(store.userFromAccount({ id: ana.id, name: "Ana Maria", email: "ana@exemple.ch", role: "admin" })).toMatchObject({ id: ana.id, name: "Ana Maria", role: "admin" });
+    expect(store.userFromAccount({ id: "autre-id", name: "Bob", email: "BOB@exemple.ch", role: "admin" })).toMatchObject({ id: bob.id, role: "admin" });
+    expect(store.countUsers()).toBe(2);
+  });
+
+  it("crée la personne inconnue, sans mot de passe TickUp", () => {
+    setup();
+    const dan = store.userFromAccount({ id: "dan-id", name: "Dan", email: "dan@exemple.ch", role: "member" });
+    expect(dan).toMatchObject({ id: "dan-id", role: "member" });
+    expect(store.getCredentials("dan@exemple.ch")?.hash).toBe("");
+  });
+
+  it("le dernier administrateur de TickUp le reste, les autres suivent le compte", () => {
+    const { ana, bob } = setup();
+    expect(store.userFromAccount({ id: "x", name: "Ana", email: "ana@exemple.ch", role: "member" }).role).toBe("admin");
+    store.userFromAccount({ id: "y", name: "Bob", email: "bob@exemple.ch", role: "admin" });
+    expect(store.userFromAccount({ id: "x", name: "Ana", email: "ana@exemple.ch", role: "member" })).toMatchObject({ id: ana.id, role: "member" });
+    expect(store.getUser(bob.id)?.role).toBe("admin");
+  });
+
+  it("ne prend pas l'e-mail de quelqu'un d'autre", () => {
+    const { ana } = setup();
+    expect(store.userFromAccount({ id: ana.id, name: "Ana", email: "bob@exemple.ch", role: "admin" }).email).toBe("ana@exemple.ch");
+  });
+
+  it("la session garde le jeton du compte et le rend à la fermeture", () => {
+    const { ana } = setup();
+    store.addSession("t-compte", ana.id, new Date(Date.now() + 60_000).toISOString(), "jeton");
+    store.addSession("t-local", ana.id, new Date(Date.now() + 60_000).toISOString());
+    expect(store.removeSession("t-compte")).toBe("jeton");
+    expect(store.removeSession("t-local")).toBeNull();
+    expect(store.sessionUser("t-compte")).toBeNull();
+  });
+});

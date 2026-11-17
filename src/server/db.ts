@@ -149,6 +149,8 @@ export function db() {
   const addColumn = (table: string, column: string, definition: string) => {
     if (!(conn.pragma(`table_info(${table})`) as { name: string }[]).some((c) => c.name === column)) conn.exec(`alter table ${table} add column ${column} ${definition}`);
   };
+  // Kept to close the Compte Postmelo session too when this one is closed.
+  addColumn("sessions", "id_token", "text");
   addColumn("issues", "start_date", "text");
   addColumn("issues", "sprint_id", "text references sprints (id) on delete set null");
   // Where an imported item comes from ("linear:<id>"): importing twice updates instead of duplicating.
@@ -212,6 +214,29 @@ export function createFirstUser(input: { email: string; name: string; salt: stri
   return tx(() => (countUsers() > 0 ? null : createUser({ ...input, role: "admin" })));
 }
 
+/**
+ * The person the Compte Postmelo just vouched for: found by id, else by e-mail (the accounts made
+ * in TickUp before), else created. The account is the reference for name, e-mail and role.
+ * A person created here has no TickUp password: the password form refuses them.
+ */
+export function userFromAccount(person: { id: string; name: string; email: string; role: Role }): User {
+  return tx(() => {
+    const email = person.email.trim().toLowerCase();
+    const name = person.name.trim() || email;
+    const found = (db().prepare("select * from users where id = ?").get(person.id) ?? db().prepare("select * from users where email = ?").get(email)) as UserRow | undefined;
+    if (!found) {
+      db().prepare("insert into users (id, email, name, role, salt, password_hash, created_at) values (?, ?, ?, ?, ?, '', ?)").run(person.id, email, name, person.role, crypto.randomBytes(16).toString("hex"), now());
+      return getUser(person.id)!;
+    }
+    // The last administrator of TickUp stays one, whatever the account says: someone must hold the keys here.
+    const lastAdmin = found.role === "admin" && person.role !== "admin" && (db().prepare("select count(*) as n from users where role = 'admin'").get() as { n: number }).n === 1;
+    db().prepare("update users set name = ?, role = ? where id = ?").run(name, lastAdmin ? "admin" : person.role, found.id);
+    // An e-mail already used by someone else here stays as it was, rather than refusing the sign-in.
+    if (found.email !== email && !db().prepare("select 1 from users where email = ?").get(email)) db().prepare("update users set email = ? where id = ?").run(email, found.id);
+    return getUser(found.id)!;
+  });
+}
+
 export const renameUser = (id: string, name: string) => db().prepare("update users set name = ? where id = ?").run(name.trim(), id);
 
 export function setUserPassword(id: string, salt: string, hash: string) {
@@ -223,9 +248,9 @@ export function setUserPassword(id: string, salt: string, hash: string) {
 
 // ---- Sessions
 
-export function addSession(tokenHash: string, userId: string, expiresAt: string) {
+export function addSession(tokenHash: string, userId: string, expiresAt: string, idToken: string | null = null) {
   db().prepare("delete from sessions where expires_at < ?").run(now());
-  db().prepare("insert into sessions (token_hash, user_id, expires_at) values (?, ?, ?)").run(tokenHash, userId, expiresAt);
+  db().prepare("insert into sessions (token_hash, user_id, expires_at, id_token) values (?, ?, ?, ?)").run(tokenHash, userId, expiresAt, idToken);
 }
 
 export function sessionUser(tokenHash: string): User | null {
@@ -233,7 +258,8 @@ export function sessionUser(tokenHash: string): User | null {
   return r ? toUser(r) : null;
 }
 
-export const removeSession = (tokenHash: string) => db().prepare("delete from sessions where token_hash = ?").run(tokenHash);
+/** Closes the session. Returns the ID token it was opened with, when it came from the Compte Postmelo. */
+export const removeSession = (tokenHash: string) => (db().prepare("delete from sessions where token_hash = ? returning id_token").get(tokenHash) as { id_token: string | null } | undefined)?.id_token ?? null;
 
 // ---- Projects
 
