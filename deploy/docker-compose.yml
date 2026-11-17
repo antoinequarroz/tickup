@@ -1,0 +1,30 @@
+# TickUp sur le VPS, à côté de Cordée, Cairn et Metricove.
+#
+# Le Caddy déjà en place occupe les ports 80 et 443 : TickUp passe par lui.
+# Ajoute ce bloc à son Caddyfile, puis recharge-le :
+#
+#   tickup.antoinequarroz.ch {
+#       encode zstd gzip
+#       header Strict-Transport-Security "max-age=31536000"
+#       reverse_proxy 172.17.0.1:3040 {
+#           flush_interval -1   # mises à jour en direct (flux d'événements)
+#       }
+#   }
+#
+#   cd deploy && docker compose up -d --build
+
+services:
+  tickup:
+    build: ..
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      DATA_DIR: /data
+      TZ: Europe/Zurich
+    volumes:
+      - tickup-data:/data
+    ports:
+      - "${TICKUP_BIND:-172.17.0.1}:${TICKUP_PORT:-3040}:3000"
+
+volumes:
+  tickup-data:
