@@ -1,6 +1,6 @@
 "use client";
 
-import { Columns3, Layers, Plus, Rows3, Search, Settings2, X } from "lucide-react";
+import { Columns3, GanttChartSquare, Layers, Plus, Rows3, Search, Settings2, Timer, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useApp } from "@/lib/store";
@@ -19,6 +19,8 @@ export function ProjectHeader() {
   const tabs = [
     { href: base, label: "Tableau", Icon: Columns3 },
     { href: `${base}/list`, label: "Liste", Icon: Rows3 },
+    { href: `${base}/sprints`, label: "Sprints", Icon: Timer },
+    { href: `${base}/timeline`, label: "Planning", Icon: GanttChartSquare },
     { href: `${base}/epics`, label: "Epics", Icon: Layers },
     { href: `${base}/settings`, label: "Réglages", Icon: Settings2 },
   ];
@@ -76,6 +78,7 @@ function FilterBar() {
   const label = data.labels.find((l) => l.id === filters.label);
   const epic = data.epics.find((e) => e.id === filters.epic);
   const type = data.types.find((t) => t.id === filters.type);
+  const sprint = data.sprints.find((s) => s.id === filters.sprint);
   const who = filters.assignee === "none" ? "Personne" : userById(filters.assignee)?.name;
 
   return (
@@ -98,6 +101,11 @@ function FilterBar() {
       {data.epics.length > 0 && (
         <Picker label="Epic" value={filters.epic} noneLabel="Toutes" onChange={(v) => set({ epic: (v as string) || null })} options={[{ value: "none", label: "Sans epic" }, ...data.epics.map((e) => ({ value: e.id, label: e.name }))]} className="shrink-0">
           <span className={chip(!!filters.epic)}>{filters.epic === "none" ? "Sans epic" : (epic?.name ?? "Epic")}</span>
+        </Picker>
+      )}
+      {data.sprints.length > 0 && (
+        <Picker label="Sprint" value={filters.sprint} noneLabel="Tous" onChange={(v) => set({ sprint: (v as string) || null })} options={[{ value: "none", label: "Hors sprint" }, ...data.sprints.map((s) => ({ value: s.id, label: s.name, hint: s.state === "active" ? "en cours" : s.state === "done" ? "terminé" : undefined }))]} className="shrink-0">
+          <span className={chip(!!filters.sprint)}>{filters.sprint === "none" ? "Hors sprint" : (sprint?.name ?? "Sprint")}</span>
         </Picker>
       )}
       {data.types.length > 0 && (

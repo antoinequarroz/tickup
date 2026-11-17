@@ -1,6 +1,6 @@
 import "server-only";
 import { CATEGORIES } from "@/lib/templates";
-import type { EpicState, Priority, StatusCategory } from "@/lib/types";
+import type { EpicState, Priority, SprintState, StatusCategory } from "@/lib/types";
 import { getIssue, getUser, projectOf, wouldLoop, type IssuePatch } from "./db";
 import { dateField, MAX_DESCRIPTION, MAX_TITLE, text } from "./http";
 
@@ -55,10 +55,15 @@ export function readIssue(data: Record<string, unknown>, projectId: string, opts
     if (data.estimate !== null && (typeof data.estimate !== "number" || data.estimate < 0 || data.estimate > 10_000)) return "Estimation invalide";
     out.estimate = data.estimate as number | null;
   }
-  if (data.dueDate !== undefined) {
-    const d = dateField(data.dueDate);
+  for (const field of ["dueDate", "startDate"] as const) {
+    if (data[field] === undefined) continue;
+    const d = dateField(data[field]);
     if (d === undefined) return "Date invalide";
-    out.dueDate = d;
+    out[field] = d;
+  }
+  if (data.sprintId !== undefined) {
+    if (data.sprintId !== null && !belongs("sprints", data.sprintId, projectId)) return "Sprint inconnu";
+    out.sprintId = data.sprintId as string | null;
   }
   if (data.labelIds !== undefined) {
     if (!Array.isArray(data.labelIds) || data.labelIds.length > 30 || !data.labelIds.every((l) => belongs("labels", l, projectId))) return "Étiquette inconnue";
@@ -74,3 +79,4 @@ export function readIssue(data: Record<string, unknown>, projectId: string, opts
 export const validCategory = (v: unknown): v is StatusCategory => CATEGORIES.some((c) => c.value === v);
 export const validEpicState = (v: unknown): v is EpicState => v === "planned" || v === "active" || v === "done" || v === "canceled";
 export const validTone = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 4;
+export const validSprintState = (v: unknown): v is SprintState => v === "planned" || v === "active" || v === "done";

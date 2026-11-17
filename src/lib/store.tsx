@@ -8,7 +8,7 @@ import { api, APP_NAME } from "./utils";
 export type LiveEvent = ServerEvent | { type: "resync" };
 
 /** A ticket to create, with the fields the place it is created from already knows. */
-export type NewIssueDraft = { projectKey?: string; statusId?: string; epicId?: string; parentId?: string };
+export type NewIssueDraft = { projectKey?: string; statusId?: string; epicId?: string; sprintId?: string; parentId?: string };
 
 type Store = AppState & {
   userById: (id: string | null | undefined) => User | undefined;

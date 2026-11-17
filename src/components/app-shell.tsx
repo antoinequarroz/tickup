@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, FolderKanban, Inbox, LayoutGrid, Plus, Search, Settings, SquarePen } from "lucide-react";
+import { ArrowUpRight, FolderKanban, Inbox, LayoutGrid, Map as MapIcon, Plus, Search, Settings, SquarePen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -17,6 +17,7 @@ import { Avatar, Kbd, primaryClass } from "./ui";
 const NAV = [
   { href: "/my", label: "Mes tickets", Icon: Inbox },
   { href: "/projects", label: "Projets", Icon: FolderKanban },
+  { href: "/roadmap", label: "Roadmap", Icon: MapIcon },
   { href: "/modules", label: "Suite", Icon: LayoutGrid },
   { href: "/settings", label: "Réglages", Icon: Settings },
 ];

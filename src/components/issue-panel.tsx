@@ -1,12 +1,12 @@
 "use client";
 
-import { ArrowUpRight, ChevronRight, Copy, CornerLeftUp, Hash, Link2, Plus, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Ban, ChevronRight, Copy, CornerLeftUp, Hash, Link2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
 import type { Comment, Issue } from "@/lib/types";
 import { api, cn, relative } from "@/lib/utils";
-import { AssigneeField, DueField, EpicField, LabelsField, PriorityField, StatusField, TypeField } from "./fields";
+import { AssigneeField, DueField, EpicField, LabelsField, PriorityField, SprintField, StartField, StatusField, TypeField } from "./fields";
 import { PriorityIcon, StatusIcon } from "./icons";
 import { Picker } from "./picker";
 import { useProjectCtx } from "./project-context";
@@ -119,6 +119,7 @@ function IssueDetail({ issue }: { issue: Issue }) {
           <Description issue={issue} onSave={(description) => change({ description })} />
 
           <SubIssues parent={issue} subs={subs} />
+          <Links issue={issue} />
           <Comments issueId={issue.id} meId={me.id} />
         </div>
 
@@ -140,6 +141,12 @@ function IssueDetail({ issue }: { issue: Issue }) {
           </Prop>
           <Prop label="Epic">
             <EpicField data={data} issue={issue} onChange={change} />
+          </Prop>
+          <Prop label="Sprint">
+            <SprintField data={data} issue={issue} onChange={change} />
+          </Prop>
+          <Prop label="Début">
+            <StartField data={data} issue={issue} onChange={change} />
           </Prop>
           <Prop label="Échéance">
             <DueField data={data} issue={issue} onChange={change} />
@@ -283,6 +290,84 @@ function Estimate({ value, onSave }: { value: number | null; onSave: (v: number 
       <Hash className={cn("size-[14px]", value != null ? "text-ink" : "text-ink-3")} />
       <input ref={input} value={text} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} inputMode="decimal" placeholder="Points ou heures" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-3" />
     </label>
+  );
+}
+
+/** Dependencies: the tickets this one waits for, and the tickets waiting for it. They are the arrows of the planning. */
+function Links({ issue }: { issue: Issue }) {
+  const { data, openIssue, reload } = useProjectCtx();
+  const byId = new Map(data.issues.map((i) => [i.id, i]));
+  const linked = new Set([issue.id, ...issue.blockedBy, ...issue.blocks]);
+  const others = data.issues.filter((i) => !linked.has(i.id)).map((i) => ({ value: i.id, label: `${i.ref} ${i.title}` }));
+  const isDone = (i: Issue) => {
+    const c = data.statuses.find((x) => x.id === i.statusId)?.category;
+    return c === "done" || c === "canceled";
+  };
+
+  const send = async (method: "POST" | "DELETE", json: { blockedBy: string } | { blocks: string }) => {
+    try {
+      await api(`/api/issues/${issue.id}/links`, { method, json });
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const rows = [
+    ...issue.blockedBy.map((id) => ({ other: byId.get(id), kind: "Bloqué par", body: { blockedBy: id } })),
+    ...issue.blocks.map((id) => ({ other: byId.get(id), kind: "Bloque", body: { blocks: id } })),
+  ].filter((r) => r.other);
+  const waiting = issue.blockedBy.some((id) => byId.get(id) && !isDone(byId.get(id)!));
+  const add = "press flex h-7 items-center gap-1 rounded-md px-2 text-[12.5px] text-ink-3 hover:bg-ink/[0.05] hover:text-ink";
+
+  return (
+    <section className="mt-6">
+      <div className="flex items-center gap-1 border-b border-line pb-2">
+        <h3 className="text-[13px] font-medium">Dépendances</h3>
+        {waiting && (
+          <span className="ml-1 flex items-center gap-1 rounded-full bg-ink px-2 py-px text-[11px] font-medium text-bg">
+            <Ban className="size-3" />
+            En attente
+          </span>
+        )}
+        <Picker label="Bloqué par" value={null} onChange={(v) => v && send("POST", { blockedBy: v as string })} options={others} align="end" className="ml-auto">
+          <span className={add}>
+            <Plus className="size-3.5" />
+            Bloqué par
+          </span>
+        </Picker>
+        <Picker label="Bloque" value={null} onChange={(v) => v && send("POST", { blocks: v as string })} options={others} align="end">
+          <span className={add}>
+            <Plus className="size-3.5" />
+            Bloque
+          </span>
+        </Picker>
+      </div>
+      {rows.map(({ other, kind, body }) => {
+        const o = other!;
+        const status = data.statuses.find((x) => x.id === o.statusId);
+        return (
+          <div key={kind + o.id} onClick={() => openIssue(o.ref)} className="group flex h-9 cursor-pointer items-center gap-2 border-b border-line px-1 text-[13px] hover:bg-ink/[0.025]">
+            <span className="w-[68px] shrink-0 text-[11.5px] text-ink-3">{kind}</span>
+            {status && <StatusIcon category={status.category} />}
+            <span className="w-[56px] shrink-0 font-mono text-[11.5px] text-ink-3">{o.ref}</span>
+            <span className={cn("min-w-0 flex-1 truncate", isDone(o) && "text-ink-3 line-through")}>{o.title}</span>
+            <button
+              aria-label={`Retirer la dépendance avec ${o.ref}`}
+              title="Retirer"
+              onClick={(e) => {
+                e.stopPropagation();
+                void send("DELETE", body);
+              }}
+              className="press flex size-6 items-center justify-center rounded-md text-ink-3 opacity-0 hover:bg-ink/[0.06] hover:text-ink group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        );
+      })}
+      {!rows.length && <p className="px-1 py-2 text-[12.5px] text-ink-3">Aucune. Indique les tickets à finir avant celui-ci : ils apparaissent reliés sur le planning.</p>}
+    </section>
   );
 }
 
