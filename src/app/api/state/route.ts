@@ -1,3 +1,4 @@
+import { githubConfigured } from "@/server/github";
 import { NextResponse } from "next/server";
 import type { AppState } from "@/lib/types";
 import { listModules } from "@/modules/registry";
@@ -11,6 +12,6 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const me = await currentUser();
   if (!me) return unauthorized();
-  const state: AppState = { me, users: listUsers(), projects: listProjects(), modules: listModules(), integrations: { apiToken: (process.env.API_TOKEN?.length ?? 0) >= 24, webhook: /^https?:\/\//.test(process.env.SUITE_WEBHOOK_URL ?? "") } };
+  const state: AppState = { me, users: listUsers(), projects: listProjects(), modules: listModules(), integrations: { apiToken: (process.env.API_TOKEN?.length ?? 0) >= 24, webhook: /^https?:\/\//.test(process.env.SUITE_WEBHOOK_URL ?? ""), github: githubConfigured() } };
   return NextResponse.json(state);
 }

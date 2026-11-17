@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { templateById } from "@/lib/templates";
-import type { Comment, Epic, EpicState, Issue, IssueType, Label, Priority, Project, ProjectData, RoadmapProject, Role, Sprint, SprintState, Status, StatusCategory, TemplateId, User } from "@/lib/types";
+import type { Comment, GithubLink, Epic, EpicState, Issue, IssueType, Label, Priority, Project, ProjectData, RoadmapProject, Role, Sprint, SprintState, Status, StatusCategory, TemplateId, User } from "@/lib/types";
 
 export const dataDir = () => path.resolve(process.env.DATA_DIR ?? "./data");
 
@@ -129,6 +129,21 @@ export function db() {
       primary key (blocker_id, blocked_id)
     );
     create index if not exists issue_links_blocked on issue_links (blocked_id);
+    -- What GitHub says about a ticket: the pull requests, commits and branches that name it.
+    create table if not exists github_links (
+      id text primary key,
+      issue_id text not null references issues (id) on delete cascade,
+      kind text not null,
+      repo text not null,
+      ref text not null,
+      title text not null default '',
+      url text not null,
+      state text not null default '',
+      author text not null default '',
+      updated_at text not null,
+      unique (issue_id, kind, repo, ref)
+    );
+    create index if not exists github_links_ref on github_links (kind, repo, ref);
   `);
   // Columns added after the first release: an existing database gets them here, once.
   const addColumn = (table: string, column: string, definition: string) => {
@@ -512,6 +527,7 @@ export function getProjectData(idOrKey: string): ProjectData | null {
 }
 
 const categoryOf = (statusId: string) => (db().prepare("select category from statuses where id = ?").get(statusId) as { category: StatusCategory } | undefined)?.category;
+export const categoryOfStatus = (statusId: string) => categoryOf(statusId);
 const isClosed = (c: StatusCategory | undefined) => c === "done" || c === "canceled";
 
 export type IssueInput = {
@@ -730,4 +746,44 @@ export function listRoadmap(): RoadmapProject[] {
   return listProjects()
     .filter((p) => !p.archived)
     .map((project) => ({ project, epics: listEpics(project.id), sprints: listSprints(project.id) }));
+}
+
+// ---- GitHub
+
+type GithubRow = { id: string; issue_id: string; kind: GithubLink["kind"]; repo: string; ref: string; title: string; url: string; state: string; author: string; updated_at: string };
+const toGithub = (r: GithubRow): GithubLink => ({ id: r.id, issueId: r.issue_id, kind: r.kind, repo: r.repo, ref: r.ref, title: r.title, url: r.url, state: r.state, author: r.author, updatedAt: r.updated_at });
+
+/** Pull requests first, then branches and commits, the most recent first. */
+export const listGithubLinks = (issueId: string) =>
+  (db().prepare("select * from github_links where issue_id = ? order by case kind when 'pr' then 0 when 'branch' then 1 else 2 end, updated_at desc limit 100").all(issueId) as GithubRow[]).map(toGithub);
+
+const MAX_COMMIT_LINKS = 50;
+
+/** Records (or refreshes) what GitHub says about a ticket. True when something changed. Only the latest commits are kept. */
+export function saveGithubLink(issueId: string, link: Pick<GithubLink, "kind" | "repo" | "ref" | "title" | "url" | "state" | "author">): boolean {
+  return tx(() => {
+    const old = db().prepare("select id, title, url, state, author from github_links where issue_id = ? and kind = ? and repo = ? and ref = ?").get(issueId, link.kind, link.repo, link.ref) as { id: string; title: string; url: string; state: string; author: string } | undefined;
+    if (old) {
+      if (old.title === link.title && old.url === link.url && old.state === link.state && old.author === link.author) return false;
+      db().prepare("update github_links set title = ?, url = ?, state = ?, author = ?, updated_at = ? where id = ?").run(link.title, link.url, link.state, link.author, now(), old.id);
+      return true;
+    }
+    db().prepare("insert into github_links (id, issue_id, kind, repo, ref, title, url, state, author, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(newId(), issueId, link.kind, link.repo, link.ref, link.title, link.url, link.state, link.author, now());
+    if (link.kind === "commit") {
+      db()
+        .prepare("delete from github_links where issue_id = ? and kind = 'commit' and id not in (select id from github_links where issue_id = ? and kind = 'commit' order by updated_at desc, rowid desc limit ?)")
+        .run(issueId, issueId, MAX_COMMIT_LINKS);
+    }
+    return true;
+  });
+}
+
+/** The tickets a pull request, commit or branch is attached to. */
+export const githubLinkIssues = (kind: GithubLink["kind"], repo: string, ref: string) => (db().prepare("select issue_id from github_links where kind = ? and repo = ? and ref = ?").all(kind, repo, ref) as { issue_id: string }[]).map((r) => r.issue_id);
+
+export const removeGithubLink = (issueId: string, kind: GithubLink["kind"], repo: string, ref: string) => db().prepare("delete from github_links where issue_id = ? and kind = ? and repo = ? and ref = ?").run(issueId, kind, repo, ref);
+
+/** The first status of a project in a category, by position. */
+export function firstStatus(projectId: string, category: StatusCategory): Status | null {
+  return listStatuses(projectId).find((s) => s.category === category) ?? null;
 }

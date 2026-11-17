@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/server/auth";
-import { deleteIssue, getIssue, listComments, listSubIssues, updateIssue } from "@/server/db";
+import { deleteIssue, getIssue, listComments, listGithubLinks, listSubIssues, updateIssue } from "@/server/db";
 import { publish } from "@/server/events";
 import { body, fail, unauthorized } from "@/server/http";
 import { emit } from "@/server/suite";
@@ -9,12 +9,12 @@ import { readIssue } from "@/server/validate";
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
-/** A ticket by id or reference (WEB-12), with its sub-tickets and comments. */
+/** A ticket by id or reference (WEB-12), with its sub-tickets, its comments and what GitHub says about it. */
 export async function GET(_req: Request, { params }: Ctx) {
   if (!(await currentUser())) return unauthorized();
   const issue = getIssue((await params).id);
   if (!issue) return fail("Ticket introuvable", 404);
-  return NextResponse.json({ issue, subIssues: listSubIssues(issue.id), comments: listComments(issue.id) });
+  return NextResponse.json({ issue, subIssues: listSubIssues(issue.id), comments: listComments(issue.id), github: listGithubLinks(issue.id) });
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
