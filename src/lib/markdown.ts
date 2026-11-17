@@ -251,3 +251,22 @@ export function parseMarkdown(source: string, depth = 0): Block[] {
   }
   return blocks;
 }
+
+const flatten = (nodes: Inline[]): string => nodes.map((n) => (n.type === "text" || n.type === "code" ? n.text : flatten(n.children))).join("");
+
+/** The words of a Markdown text without its marks, for one-line previews (project and epic cards). */
+export function plainText(source: string, max = 600): string {
+  const out: string[] = [];
+  const walk = (blocks: Block[]) => {
+    for (const b of blocks) {
+      if (out.join(" ").length > max) return;
+      if (b.type === "paragraph") out.push(b.lines.map(flatten).join(" "));
+      else if (b.type === "heading") out.push(flatten(b.children));
+      else if (b.type === "list") out.push(b.items.map((i) => flatten(i.children)).join(" · "));
+      else if (b.type === "quote") walk(b.blocks);
+      else if (b.type === "code") out.push(b.text);
+    }
+  };
+  walk(parseMarkdown(source.slice(0, max * 4)));
+  return out.join(" ").replace(/\s+/g, " ").trim().slice(0, max);
+}

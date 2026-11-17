@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Block, type Inline, parseInline, parseMarkdown, safeHref } from "./markdown";
+import { type Block, type Inline, parseInline, parseMarkdown, plainText, safeHref } from "./markdown";
 
 const flat = (nodes: Inline[]): string => nodes.map((n) => (n.type === "text" || n.type === "code" ? n.text : flat(n.children))).join("");
 
@@ -102,5 +102,11 @@ describe("liens dans les liens", () => {
   it("refuse les caractères invisibles dans une adresse, y compris entre chevrons", () => {
     expect(safeHref("https://exa\u202emple.ch")).toBeNull();
     expect(parseInline("<https://a\u200bb.ch>").some((n) => n.type === "link")).toBe(false);
+  });
+});
+
+describe("aperçu en texte simple", () => {
+  it("enlève les marques et garde les mots", () => {
+    expect(plainText("## Déjà en place\n\n* Notes en **Markdown**\n* [Cairn](<http://cairn.ch>)\n\nFin.")).toBe("Déjà en place Notes en Markdown · Cairn Fin.");
   });
 });
