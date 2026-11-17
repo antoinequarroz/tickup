@@ -79,7 +79,7 @@ function Sidebar() {
       <div className="flex items-center gap-2 px-1.5 pb-3">
         <Logo />
         <span className="text-[15px] font-semibold tracking-[-0.01em]">{APP_NAME}</span>
-        <span className="ml-auto rounded-md border border-line px-1.5 py-px font-mono text-[10px] text-ink-3">v0.1</span>
+        <span className="ml-auto rounded-md border border-line px-1.5 py-px font-mono text-[10px] text-ink-3">v0.2</span>
       </div>
 
       <div className="mb-2 flex gap-1.5">

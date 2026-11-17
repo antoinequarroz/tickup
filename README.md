@@ -7,6 +7,9 @@ TickUp fait partie de la même suite que [Cordée](https://github.com/antoinequa
 ![Le tableau](docs/img/kanban.png)
 ![Un ticket et ses sous-tickets](docs/img/ticket.png)
 ![En sombre](docs/img/kanban-sombre.png)
+![Le planning, avec les dépendances](docs/img/planning.png)
+![Un sprint en cours](docs/img/sprints.png)
+![La roadmap de tous les projets](docs/img/roadmap.png)
 
 ## Ce qui marche aujourd'hui
 
@@ -16,7 +19,11 @@ TickUp fait partie de la même suite que [Cordée](https://github.com/antoinequa
 - **Tickets** : type, statut, priorité, responsable, étiquettes, epic, échéance, estimation, description, commentaires. Numérotés par projet (`WEB-12`).
 - **Sous-tickets** : sur autant de niveaux que voulu, avec l'avancement sur le parent.
 - **Epics** : les grands chantiers, avec dates de début et cible, état et avancement.
-- **Filtres** : texte, responsable, priorité, étiquette, epic, type.
+- **Sprints** : un sprint en cours par projet, avec objectif, dates, avancement en tickets et en points, courbe du reste à faire. À la fin, les tickets ouverts passent au sprint suivant ou reviennent au backlog.
+- **Planning (Gantt)** : chaque ticket est une barre entre son début et son échéance, à déplacer ou étirer à la souris. Les dépendances (« bloqué par », « bloque ») sont des flèches, et un ticket qui commence avant la fin de celui qui le bloque est signalé.
+- **Roadmap** : les epics et les sprints de tous les projets sur une même frise.
+- **Import depuis Linear** : équipes, statuts, étiquettes, projets, cycles, tickets et commentaires, par l'API de Linear (voir plus bas).
+- **Filtres** : texte, responsable, priorité, étiquette, epic, sprint, type.
 - **Mes tickets** : ce qui m'est attribué, tous projets confondus.
 - **Réglages par projet** : statuts (nom, catégorie, ordre), étiquettes (cinq teintes du gris au noir), types et icônes, archivage.
 - **En direct** : un changement fait ailleurs s'affiche sans recharger.
@@ -90,6 +97,19 @@ Avec `SUITE_WEBHOOK_URL`, chaque changement est envoyé en `POST` JSON à cette 
 
 Événements : `project.created|updated|deleted`, `issue.created|updated|deleted|commented`, `epic.created|updated|deleted`. L'envoi ne bloque jamais TickUp : si l'outil d'en face est éteint, l'événement est perdu.
 
+## Importer depuis Linear
+
+Dans Réglages → « Importer depuis Linear » (administrateurs). Crée une clé dans Linear → Settings → Security & access → Personal API keys, colle-la, choisis les équipes, puis « Importer ».
+
+- Une équipe Linear devient un projet, avec la même clé : `ENG-42` reste `ENG-42`. Si la clé est déjà prise par un autre projet, une clé voisine est choisie (`ENG2`).
+- Sont repris : les statuts (dans l'ordre de Linear), les étiquettes, les projets Linear (en epics), les cycles (en sprints), les tickets (titre, description, statut, priorité, estimation, échéance, responsable, sous-tickets, dates d'origine), les dépendances « bloque » et les commentaires.
+- Les personnes sont reconnues par leur e-mail : crée leurs comptes avant d'importer. Les autres sont listées dans le résultat, et leurs tickets arrivent sans responsable.
+- L'import se relance sans risque : seul ce qui est nouveau dans Linear s'ajoute. Ce qui a déjà été importé (repéré par `external_ref = linear:<id>`) n'est jamais dupliqué et garde les changements faits dans TickUp, sauf si tu coches « Reprendre la version de Linear ». Les tickets créés dans TickUp ne sont pas touchés. Les commentaires n'arrivent qu'à la première importation d'un ticket.
+- Chaque équipe est écrite en une seule transaction : une erreur ne laisse rien à moitié importé.
+- La clé ne sert que le temps de la requête : elle n'est ni enregistrée, ni journalisée. Linear limite le nombre de requêtes par heure ; pour un très gros espace de travail, importe les équipes en plusieurs fois.
+
+Le code : `src/server/linear.ts` (client GraphQL et correspondances), `src/server/import.ts` (écriture en base), `src/app/api/import/linear` (la route).
+
 ## Comment c'est fait
 
 Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Cordée dont TickUp reprend le socle (comptes, sessions, thème, briques d'interface).
@@ -101,15 +121,12 @@ Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Cordée dont Ti
 | `src/server/suite.ts` | Les événements vers la suite. |
 | `src/server/auth.ts` | Sessions par cookie, et jeton d'API. |
 | `src/app/api` | L'API. Chaque route vérifie la session ou le jeton. |
-| `src/app/(app)/p/[key]` | Les vues d'un projet : tableau, liste, epics, réglages. |
+| `src/app/(app)/p/[key]` | Les vues d'un projet : tableau, liste, sprints, planning, epics, réglages. |
 | `src/components` | L'interface. `ui.tsx` contient les briques communes à la suite. |
 | `src/app/globals.css` | Les couleurs et le thème, repris de la suite, en noir et blanc. |
 
 ## La suite
 
-- Roadmap et Gantt, à partir des dates des epics et des tickets, avec dépendances entre tickets.
-- Sprints (cycles).
-- Import depuis Linear par son API.
 - Intégration GitHub (branches et PR liées aux tickets).
 - Une seule connexion pour tous les outils de la suite.
 - Pièces jointes, mentions et notifications.

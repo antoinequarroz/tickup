@@ -359,7 +359,7 @@ function Links({ issue }: { issue: Issue }) {
                 e.stopPropagation();
                 void send("DELETE", body);
               }}
-              className="press flex size-6 items-center justify-center rounded-md text-ink-3 opacity-0 hover:bg-ink/[0.06] hover:text-ink group-hover:opacity-100 focus-visible:opacity-100"
+              className="press flex size-6 items-center justify-center rounded-md text-ink-3 opacity-0 hover:bg-ink/[0.06] hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
             >
               <X className="size-3.5" />
             </button>

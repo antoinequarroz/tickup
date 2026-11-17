@@ -29,6 +29,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   let moveOpenTo: string | null | undefined;
   if (data.moveOpenTo !== undefined) {
     if (data.moveOpenTo !== null && (typeof data.moveOpenTo !== "string" || data.moveOpenTo === id || projectOf("sprints", data.moveOpenTo) !== current.projectId)) return fail("Sprint de destination inconnu");
+    if (data.moveOpenTo !== null && getSprint(data.moveOpenTo as string)?.state === "done") return fail("Le sprint de destination est déjà terminé");
     moveOpenTo = data.moveOpenTo as string | null;
   }
   const sprint = updateSprint(id, { name, goal: typeof data.goal === "string" ? data.goal.slice(0, 2000) : undefined, startDate, endDate, state: data.state as never, moveOpenTo });

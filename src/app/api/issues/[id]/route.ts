@@ -23,6 +23,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!cur) return fail("Ticket introuvable", 404);
   const patch = readIssue(await body(req), cur.projectId, { creating: false, issueId: cur.id });
   if (typeof patch === "string") return fail(patch);
+  const start = patch.startDate !== undefined ? patch.startDate : cur.startDate;
+  const due = patch.dueDate !== undefined ? patch.dueDate : cur.dueDate;
+  if ((patch.startDate !== undefined || patch.dueDate !== undefined) && start && due && due < start) return fail("L'échéance est avant le début");
   const issue = updateIssue(cur.id, patch)!;
   const changed = Object.keys(patch).filter((k) => k !== "position");
   const live = { type: "issue", projectId: issue.projectId, issueId: issue.id } as const;

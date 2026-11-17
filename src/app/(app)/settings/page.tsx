@@ -3,6 +3,7 @@
 import { LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { LinearImport } from "@/components/linear-import";
 import { Avatar, Button, Card, Field, inputClass, PageHeader } from "@/components/ui";
 import { useApp } from "@/lib/store";
 import { setTheme, type Theme, useTheme } from "@/lib/theme";
@@ -25,6 +26,7 @@ export default function SettingsPage() {
           <Appearance />
           <Password />
           {me.role === "admin" && <Members />}
+          {me.role === "admin" && <LinearImport />}
           <Session />
         </div>
       </div>
