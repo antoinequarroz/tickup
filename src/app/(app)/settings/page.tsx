@@ -202,8 +202,10 @@ function Members() {
 
 function Session() {
   const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    const res = await fetch("/api/auth/logout", { method: "POST" });
+    const { signOut } = (await res.json().catch(() => ({}))) as { signOut?: string | null };
+    // Signed in with the Compte Postmelo: close that session too, it then comes back here.
+    window.location.href = signOut ?? "/login";
   };
   return (
     <Card className="flex items-center gap-3">
