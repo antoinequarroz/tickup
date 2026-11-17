@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as store from "./db";
-import { fetchTeam, importLinear, previewLinear, type TeamSummary, writeTeam } from "./import";
+import { fetchTeam, importLinear, previewLinear, teamDataFrom, type TeamSummary, writeTeam } from "./import";
 import { categoryForState, cleanKey, type LinearCycle, LinearError, linearClient, mapCycles, orderStates } from "./linear";
 
 const KEY = "lin_api_SECRET123456";
@@ -439,5 +439,74 @@ describe("import d'une équipe", () => {
     const refused = await importLinear(linearClient(KEY), ["t1", "t2"], {}, ana!.id);
     expect(refused.map((r) => "error" in r && r.error.includes("Clé Linear refusée"))).toEqual([true, true]);
     expect(JSON.stringify(refused)).not.toContain(KEY);
+  });
+});
+
+describe("import depuis un fichier", () => {
+  const file = () => ({
+    team: { id: "t9", key: "ANT", name: "Antoine", description: "", states: [{ id: "s-todo", name: "Todo", type: "unstarted" }, { id: "s-done", name: "Done", type: "completed" }], labels: [{ id: "l1", name: "Epic" }] },
+    issues: [
+      { id: "a1", identifier: "ANT-1", number: 1, title: "Parent", description: "Texte **complet**", priority: 2, createdAt: "2026-09-14T16:56:05.925Z", updatedAt: "2026-09-15T10:00:00.000Z", stateId: "s-todo", labels: [{ id: "l1", name: "Epic" }], blocks: ["a2"], project: { id: "p1", name: "Site", description: "Le site", state: "started", startDate: "2026-12-01", targetDate: null } },
+      { id: "a2", identifier: "ANT-2", number: 2, title: "Enfant", createdAt: "2026-09-14T17:00:00.000Z", stateId: "s-done", completedAt: "2026-09-15T17:05:37.602Z", parentId: "a1", assignee: { name: "Ana", email: "ANA@exemple.ch" } },
+    ],
+    comments: [
+      { issueId: "a2", body: "Second", createdAt: "2026-09-16T10:00:00.000Z", author: { name: "Zoé", email: null } },
+      { issueId: "a2", body: "Premier", createdAt: "2026-09-15T10:00:00.000Z", author: { name: "Ana", email: "ana@exemple.ch" } },
+      { issueId: "inconnu", body: "Perdu", createdAt: "2026-09-15T10:00:00.000Z" },
+    ],
+  });
+
+  it("écrit le projet comme l'import par clé, et réimporter ne duplique rien", () => {
+    const data = teamDataFrom(file());
+    if (typeof data === "string") throw new Error(data);
+    const r = writeTeam(data, ana!.id, "2026-11-17");
+    expect(r).toMatchObject({ projectKey: "ANT", created: true, statuses: 2, labels: 1, epics: 1, sprints: 0, issuesCreated: 2, comments: 2, links: 1 });
+
+    const project = store.getProjectData("ANT")!;
+    const [parent, child] = [1, 2].map((n) => project.issues.find((i) => i.number === n)!);
+    expect(parent).toMatchObject({ title: "Parent", description: "Texte **complet**", priority: 2 });
+    expect(child).toMatchObject({ parentId: parent.id, assigneeId: ana!.id });
+    expect(child.completedAt).toBe("2026-09-15T17:05:37.602Z");
+    expect(project.epics.map((e) => e.name)).toEqual(["Site"]);
+
+    const again = writeTeam(data, ana!.id, "2026-11-17");
+    expect(again).toMatchObject({ created: false, issuesCreated: 0, issuesKept: 2, comments: 0, links: 0 });
+    expect(store.getProjectData("ANT")!.issues).toHaveLength(2);
+  });
+
+  it("refuse un fichier incomplet, avec la raison", () => {
+    expect(teamDataFrom(null)).toMatch(/équipe/);
+    expect(teamDataFrom({ team: { id: "t9", key: "ANT", name: "A", states: [] }, issues: [] })).toMatch(/aucun statut/);
+    const twice = file();
+    twice.issues.push({ ...twice.issues[0] });
+    expect(teamDataFrom(twice)).toMatch(/ANT-1 apparaît deux fois/);
+    const lost = file();
+    lost.issues[1].stateId = "s-ailleurs";
+    expect(teamDataFrom(lost)).toMatch(/ANT-2 a un statut inconnu/);
+    const noNumber = file();
+    (noNumber.issues[0] as Record<string, unknown>).number = "1";
+    expect(teamDataFrom(noNumber)).toMatch(/numéro/);
+    expect(teamDataFrom({ ...file(), issues: "x" })).toMatch(/liste des tickets/);
+    const huge = file();
+    huge.issues[0].number = 2 ** 53;
+    expect(teamDataFrom(huge)).toMatch(/numéro valide/);
+  });
+
+  it("nettoie ce que Linear ne produit jamais : boucle de parents, dates avec décalage, doublons de dépendances", () => {
+    const odd = file() as { team: unknown; issues: Record<string, unknown>[]; comments: Record<string, unknown>[] };
+    odd.issues[0].parentId = "a2";
+    odd.issues[0].blocks = ["a2", "a2", "a1"];
+    odd.issues[0].createdAt = "2026-09-14T18:56:05+02:00";
+    odd.issues[1].dueDate = "2026-02-31";
+    odd.comments[0].createdAt = "2026-09-16 10:00";
+    const data = teamDataFrom(odd);
+    if (typeof data === "string") throw new Error(data);
+    expect(data.issues.filter((i) => i.parentId)).toHaveLength(1);
+    expect(data.issues[0].blocks).toEqual(["a2"]);
+    expect(data.issues[0].createdAt).toBe("2026-09-14T16:56:05.000Z");
+    expect(data.issues[1].dueDate).toBeNull();
+    expect(data.comments.map((c) => c.body)).toEqual(["Premier"]);
+    writeTeam(data, ana!.id, "2026-11-17");
+    expect(store.getProjectData("ANT")!.issues.filter((i) => i.parentId)).toHaveLength(1);
   });
 });
