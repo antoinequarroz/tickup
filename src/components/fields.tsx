@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Layers, Tag, UserRound } from "lucide-react";
+import { CalendarDays, CalendarPlus, Layers, Tag, Timer, UserRound } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { PRIORITIES } from "@/lib/templates";
 import type { Issue, Priority, ProjectData } from "@/lib/types";
@@ -12,7 +12,7 @@ import { Avatar } from "./ui";
 /** How a field shows: "row" in the ticket's side panel (icon and text), "icon" on a card or a list row. */
 type Look = "row" | "icon";
 
-type FieldProps = { data: ProjectData; issue: Pick<Issue, "statusId" | "priority" | "assigneeId" | "labelIds" | "epicId" | "typeId" | "dueDate">; onChange: (patch: Partial<Issue>) => void; look?: Look };
+type FieldProps = { data: ProjectData; issue: Pick<Issue, "statusId" | "priority" | "assigneeId" | "labelIds" | "epicId" | "typeId" | "dueDate"> & Partial<Pick<Issue, "startDate" | "sprintId">>; onChange: (patch: Partial<Issue>) => void; look?: Look };
 
 const rowClass = "flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-[13px] text-ink hover:bg-ink/[0.04]";
 const iconClass = "flex size-6 items-center justify-center rounded-md hover:bg-ink/[0.06]";
@@ -150,18 +150,48 @@ export function TypeField({ data, issue, onChange }: FieldProps) {
 }
 
 export function DueField({ issue, onChange }: FieldProps) {
-  const late = isOverdue(issue.dueDate);
+  return <DateField label="Échéance" value={issue.dueDate} late={isOverdue(issue.dueDate)} min={issue.startDate ?? undefined} onChange={(dueDate) => onChange({ dueDate })} />;
+}
+
+/** When work starts: with the due date, the bar of the ticket on the planning. */
+export function StartField({ issue, onChange }: FieldProps) {
+  return <DateField label="Début" value={issue.startDate ?? null} max={issue.dueDate ?? undefined} Icon={CalendarPlus} onChange={(startDate) => onChange({ startDate })} />;
+}
+
+function DateField({ label, value, late, min, max, Icon = CalendarDays, onChange }: { label: string; value: string | null; late?: boolean; min?: string; max?: string; Icon?: typeof CalendarDays; onChange: (v: string | null) => void }) {
   return (
     <label className={cn(rowClass, "relative cursor-pointer")}>
-      <CalendarDays className={cn("size-[14px]", issue.dueDate ? "text-ink" : "text-ink-3")} />
-      <span className={cn("truncate", !issue.dueDate && "text-ink-3", late && "font-semibold text-ink underline decoration-dotted underline-offset-2")}>{issue.dueDate ? shortDate(issue.dueDate) : "Échéance"}</span>
+      <Icon className={cn("size-[14px]", value ? "text-ink" : "text-ink-3")} />
+      <span className={cn("truncate", !value && "text-ink-3", late && "font-semibold text-ink underline decoration-dotted underline-offset-2")}>{value ? shortDate(value) : label}</span>
       <input
         type="date"
-        aria-label="Échéance"
-        value={issue.dueDate ?? ""}
-        onChange={(e) => onChange({ dueDate: e.target.value || null })}
+        aria-label={label}
+        value={value ?? ""}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value || null)}
         className="absolute inset-0 cursor-pointer opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:size-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
       />
     </label>
+  );
+}
+
+const SPRINT_HINT = { active: "en cours", planned: "prévu", done: "terminé" } as const;
+
+export function SprintField({ data, issue, onChange }: FieldProps) {
+  const sprint = data.sprints.find((s) => s.id === issue.sprintId);
+  return (
+    <Picker
+      label="Sprint"
+      value={issue.sprintId ?? null}
+      noneLabel="Hors sprint (backlog)"
+      onChange={(v) => onChange({ sprintId: (v as string) || null })}
+      options={data.sprints.filter((s) => s.state !== "done" || s.id === issue.sprintId).map((s) => ({ value: s.id, label: s.name, hint: SPRINT_HINT[s.state] }))}
+    >
+      <span className={rowClass}>
+        <Timer className={cn("size-[14px]", sprint ? "text-ink" : "text-ink-3")} />
+        <span className={cn("truncate", !sprint && "text-ink-3")}>{sprint?.name ?? "Hors sprint"}</span>
+      </span>
+    </Picker>
   );
 }

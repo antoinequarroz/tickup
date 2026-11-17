@@ -8,7 +8,7 @@ import { useApp, useProject, type NewIssueDraft } from "@/lib/store";
 import { suggestKey, TEMPLATES, validKey } from "@/lib/templates";
 import type { Issue, Project, TemplateId } from "@/lib/types";
 import { api, cn } from "@/lib/utils";
-import { AssigneeField, DueField, EpicField, LabelsField, PriorityField, StatusField, TypeField } from "./fields";
+import { AssigneeField, DueField, SprintField, EpicField, LabelsField, PriorityField, StatusField, TypeField } from "./fields";
 import { Picker } from "./picker";
 import { Button, Field, inputClass, Modal } from "./ui";
 
@@ -101,7 +101,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-type Draft = Pick<Issue, "statusId" | "priority" | "assigneeId" | "labelIds" | "epicId" | "typeId" | "dueDate"> & { parentId: string | null };
+type Draft = Pick<Issue, "statusId" | "priority" | "assigneeId" | "labelIds" | "epicId" | "typeId" | "dueDate" | "sprintId"> & { parentId: string | null };
 
 export function NewIssueDialog({ draft, onClose }: { draft: NewIssueDraft; onClose: () => void }) {
   const { projects } = useApp();
@@ -149,6 +149,7 @@ function IssueForm({ projectKey, draft, onClose }: { projectKey: string; draft: 
     epicId: (sameProject && draft.epicId) || null,
     typeId: data.types[0]?.id ?? null,
     dueDate: null,
+    sprintId: (sameProject && draft.sprintId) || null,
     parentId: (sameProject && draft.parentId) || null,
   };
   const change = (patch: Partial<Draft>) => setFields({ ...f, ...patch });
@@ -188,6 +189,7 @@ function IssueForm({ projectKey, draft, onClose }: { projectKey: string; draft: 
         <TypeField data={data} issue={f} onChange={change} />
         <LabelsField data={data} issue={f} onChange={change} />
         <EpicField data={data} issue={f} onChange={change} />
+        {data.sprints.some((x) => x.state !== "done") && <SprintField data={data} issue={f} onChange={change} />}
         <DueField data={data} issue={f} onChange={change} />
       </div>
       <div className="flex items-center gap-3">

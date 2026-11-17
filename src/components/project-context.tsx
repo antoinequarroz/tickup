@@ -7,8 +7,8 @@ import { useProject } from "@/lib/store";
 import type { Issue, ProjectData } from "@/lib/types";
 import { api } from "@/lib/utils";
 
-export type Filters = { q: string; assignee: string | null; label: string | null; epic: string | null; type: string | null; priority: string | null; subIssues: boolean };
-export const NO_FILTERS: Filters = { q: "", assignee: null, label: null, epic: null, type: null, priority: null, subIssues: false };
+export type Filters = { q: string; assignee: string | null; label: string | null; epic: string | null; sprint: string | null; type: string | null; priority: string | null; subIssues: boolean };
+export const NO_FILTERS: Filters = { q: "", assignee: null, label: null, epic: null, sprint: null, type: null, priority: null, subIssues: false };
 
 type ProjectCtx = {
   filters: Filters;
@@ -45,8 +45,8 @@ export function ProjectProvider({ projectKey, children }: { projectKey: string; 
   const filters = useMemo<Filters>(() => {
     if (!data) return rawFilters;
     const alive = (id: string | null, list: { id: string }[], extra?: string) => (id && (id === extra || list.some((x) => x.id === id)) ? id : null);
-    const next = { ...rawFilters, label: alive(rawFilters.label, data.labels), type: alive(rawFilters.type, data.types), epic: alive(rawFilters.epic, data.epics, "none") };
-    return next.label === rawFilters.label && next.type === rawFilters.type && next.epic === rawFilters.epic ? rawFilters : next;
+    const next = { ...rawFilters, label: alive(rawFilters.label, data.labels), type: alive(rawFilters.type, data.types), epic: alive(rawFilters.epic, data.epics, "none"), sprint: alive(rawFilters.sprint, data.sprints, "none") };
+    return next.label === rawFilters.label && next.type === rawFilters.type && next.epic === rawFilters.epic && next.sprint === rawFilters.sprint ? rawFilters : next;
   }, [rawFilters, data]);
 
   const visible = useMemo(() => {
@@ -59,6 +59,7 @@ export function ProjectProvider({ projectKey, children }: { projectKey: string; 
         (!filters.assignee || (filters.assignee === "none" ? !i.assigneeId : i.assigneeId === filters.assignee)) &&
         (!filters.label || i.labelIds.includes(filters.label)) &&
         (!filters.epic || (filters.epic === "none" ? !i.epicId : i.epicId === filters.epic)) &&
+        (!filters.sprint || (filters.sprint === "none" ? !i.sprintId : i.sprintId === filters.sprint)) &&
         (!filters.type || i.typeId === filters.type) &&
         (!filters.priority || String(i.priority) === filters.priority),
     );

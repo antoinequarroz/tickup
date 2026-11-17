@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { templateById } from "@/lib/templates";
-import type { Comment, Epic, EpicState, Issue, IssueType, Label, Priority, Project, ProjectData, Role, Status, StatusCategory, TemplateId, User } from "@/lib/types";
+import type { Comment, Epic, EpicState, Issue, IssueType, Label, Priority, Project, ProjectData, RoadmapProject, Role, Sprint, SprintState, Status, StatusCategory, TemplateId, User } from "@/lib/types";
 
 export const dataDir = () => path.resolve(process.env.DATA_DIR ?? "./data");
 
@@ -112,7 +112,36 @@ export function db() {
       created_at text not null
     );
     create index if not exists comments_issue on comments (issue_id, created_at);
+    create table if not exists sprints (
+      id text primary key,
+      project_id text not null references projects (id) on delete cascade,
+      name text not null,
+      goal text not null default '',
+      start_date text,
+      end_date text,
+      state text not null default 'planned',
+      created_at text not null
+    );
+    -- "blocker must be finished before blocked can start": the arrows of the Gantt.
+    create table if not exists issue_links (
+      blocker_id text not null references issues (id) on delete cascade,
+      blocked_id text not null references issues (id) on delete cascade,
+      primary key (blocker_id, blocked_id)
+    );
+    create index if not exists issue_links_blocked on issue_links (blocked_id);
   `);
+  // Columns added after the first release: an existing database gets them here, once.
+  const addColumn = (table: string, column: string, definition: string) => {
+    if (!(conn.pragma(`table_info(${table})`) as { name: string }[]).some((c) => c.name === column)) conn.exec(`alter table ${table} add column ${column} ${definition}`);
+  };
+  addColumn("issues", "start_date", "text");
+  addColumn("issues", "sprint_id", "text references sprints (id) on delete set null");
+  // Where an imported item comes from ("linear:<id>"): importing twice updates instead of duplicating.
+  addColumn("issues", "external_ref", "text");
+  addColumn("epics", "external_ref", "text");
+  addColumn("projects", "external_ref", "text");
+  addColumn("sprints", "external_ref", "text");
+  conn.exec("create index if not exists issues_sprint on issues (sprint_id); create index if not exists issues_external on issues (external_ref)");
   globalForDb.__tickupDb = { dir, conn };
   return conn;
 }
@@ -336,7 +365,7 @@ export function updateType(id: string, patch: { name?: string; icon?: string }) 
 export const deleteType = (id: string) => db().prepare("delete from issue_types where id = ?").run(id);
 
 /** Which project a status, label, type, epic or ticket belongs to: every route checks it. */
-export function projectOf(table: "statuses" | "labels" | "issue_types" | "epics" | "issues", id: string): string | null {
+export function projectOf(table: "statuses" | "labels" | "issue_types" | "epics" | "issues" | "sprints", id: string): string | null {
   const r = db().prepare(`select project_id from ${table} where id = ?`).get(id) as { project_id: string } | undefined;
   return r?.project_id ?? null;
 }
@@ -404,6 +433,10 @@ type IssueRow = {
   parent_id: string | null;
   estimate: number | null;
   due_date: string | null;
+  start_date: string | null;
+  sprint_id: string | null;
+  blocked_by: string | null;
+  blocks: string | null;
   position: number;
   created_by: string | null;
   created_at: string;
@@ -416,6 +449,8 @@ type IssueRow = {
 
 const ISSUE_SELECT = `select i.*, p.key,
   (select group_concat(label_id) from issue_labels l where l.issue_id = i.id) as label_ids,
+  (select group_concat(blocker_id) from issue_links k where k.blocked_id = i.id) as blocked_by,
+  (select group_concat(blocked_id) from issue_links k where k.blocker_id = i.id) as blocks,
   (select count(*) from issues c where c.parent_id = i.id) as sub_count,
   (select count(*) from issues c join statuses s on s.id = c.status_id where c.parent_id = i.id and s.category in ('done', 'canceled')) as sub_done
   from issues i join projects p on p.id = i.project_id`;
@@ -435,6 +470,10 @@ const toIssue = (r: IssueRow): Issue => ({
   parentId: r.parent_id,
   estimate: r.estimate,
   dueDate: r.due_date,
+  startDate: r.start_date,
+  sprintId: r.sprint_id,
+  blockedBy: r.blocked_by ? r.blocked_by.split(",") : [],
+  blocks: r.blocks ? r.blocks.split(",") : [],
   position: r.position,
   labelIds: r.label_ids ? r.label_ids.split(",") : [],
   createdBy: r.created_by,
@@ -469,7 +508,7 @@ export const listSubIssues = (parentId: string) => (db().prepare(`${ISSUE_SELECT
 export function getProjectData(idOrKey: string): ProjectData | null {
   const project = getProject(idOrKey);
   if (!project) return null;
-  return { project, statuses: listStatuses(project.id), labels: listLabels(project.id), types: listTypes(project.id), epics: listEpics(project.id), issues: listIssues(project.id) };
+  return { project, statuses: listStatuses(project.id), labels: listLabels(project.id), types: listTypes(project.id), epics: listEpics(project.id), sprints: listSprints(project.id), issues: listIssues(project.id) };
 }
 
 const categoryOf = (statusId: string) => (db().prepare("select category from statuses where id = ?").get(statusId) as { category: StatusCategory } | undefined)?.category;
@@ -486,6 +525,8 @@ export type IssueInput = {
   parentId?: string | null;
   estimate?: number | null;
   dueDate?: string | null;
+  startDate?: string | null;
+  sprintId?: string | null;
   labelIds?: string[];
 };
 
@@ -506,6 +547,7 @@ export function createIssue(projectId: string, input: IssueInput, userId: string
          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(id, projectId, next_number, input.title, input.description ?? "", statusId, input.typeId ?? null, input.priority ?? 0, input.assigneeId ?? null, epicId, input.parentId ?? null, input.estimate ?? null, input.dueDate ?? null, max + 1024, userId, t, t, isClosed(categoryOf(statusId)) ? t : null);
+    if (input.startDate || input.sprintId) db().prepare("update issues set start_date = ?, sprint_id = ? where id = ?").run(input.startDate ?? null, input.sprintId ?? null, id);
     for (const l of input.labelIds ?? []) db().prepare("insert or ignore into issue_labels (issue_id, label_id) values (?, ?)").run(id, l);
     return getIssue(id)!;
   });
@@ -524,7 +566,7 @@ export function updateIssue(id: string, patch: IssuePatch): Issue | null {
     const pick = <K extends keyof IssuePatch>(k: K, fallback: Issue[keyof Issue]) => (patch[k] !== undefined ? patch[k] : fallback);
     db()
       .prepare(
-        `update issues set title = ?, description = ?, status_id = ?, type_id = ?, priority = ?, assignee_id = ?, epic_id = ?, parent_id = ?, estimate = ?, due_date = ?, position = ?, updated_at = ?, completed_at = ? where id = ?`,
+        `update issues set title = ?, description = ?, status_id = ?, type_id = ?, priority = ?, assignee_id = ?, epic_id = ?, parent_id = ?, estimate = ?, due_date = ?, start_date = ?, sprint_id = ?, position = ?, updated_at = ?, completed_at = ? where id = ?`,
       )
       .run(
         pick("title", cur.title),
@@ -537,6 +579,8 @@ export function updateIssue(id: string, patch: IssuePatch): Issue | null {
         pick("parentId", cur.parentId),
         pick("estimate", cur.estimate),
         pick("dueDate", cur.dueDate),
+        pick("startDate", cur.startDate),
+        pick("sprintId", cur.sprintId),
         // Moved to another column without a place: at the bottom.
         patch.position ?? (patch.statusId && patch.statusId !== cur.statusId ? (db().prepare("select coalesce(max(position), 0) as m from issues where status_id = ?").get(statusId) as { m: number }).m + 1024 : cur.position),
         now(),
@@ -581,3 +625,109 @@ export function getComment(id: string) {
   return r ? toComment(r) : null;
 }
 export const deleteComment = (id: string) => db().prepare("delete from comments where id = ?").run(id);
+
+// ---- Dependencies between tickets
+
+/** True if "blocker blocks blocked" would close a loop (A blocks B blocks A), directly or through others. */
+export function wouldBlockLoop(blockerId: string, blockedId: string): boolean {
+  if (blockerId === blockedId) return true;
+  // Loop if the blocker is already (indirectly) waiting on the blocked ticket.
+  const seen = new Set<string>();
+  const queue = [blockerId];
+  const next = db().prepare("select blocker_id from issue_links where blocked_id = ?");
+  while (queue.length) {
+    const at = queue.pop()!;
+    if (at === blockedId) return true;
+    if (seen.has(at)) continue;
+    seen.add(at);
+    for (const r of next.all(at) as { blocker_id: string }[]) queue.push(r.blocker_id);
+  }
+  return false;
+}
+
+export function addLink(blockerId: string, blockedId: string) {
+  db().prepare("insert or ignore into issue_links (blocker_id, blocked_id) values (?, ?)").run(blockerId, blockedId);
+}
+
+export function removeLink(blockerId: string, blockedId: string) {
+  db().prepare("delete from issue_links where blocker_id = ? and blocked_id = ?").run(blockerId, blockedId);
+}
+
+// ---- Sprints
+
+type SprintRow = { id: string; project_id: string; name: string; goal: string; start_date: string | null; end_date: string | null; state: SprintState; created_at: string; issue_count: number; done_count: number; points: number; points_done: number };
+const toSprint = (r: SprintRow): Sprint => ({
+  id: r.id,
+  projectId: r.project_id,
+  name: r.name,
+  goal: r.goal,
+  startDate: r.start_date,
+  endDate: r.end_date,
+  state: r.state,
+  createdAt: r.created_at,
+  issueCount: r.issue_count,
+  doneCount: r.done_count,
+  points: r.points,
+  pointsDone: r.points_done,
+});
+
+const SPRINT_SELECT = `select sp.*,
+  (select count(*) from issues i where i.sprint_id = sp.id) as issue_count,
+  (select count(*) from issues i join statuses s on s.id = i.status_id where i.sprint_id = sp.id and s.category in ('done', 'canceled')) as done_count,
+  (select coalesce(sum(i.estimate), 0) from issues i where i.sprint_id = sp.id) as points,
+  (select coalesce(sum(i.estimate), 0) from issues i join statuses s on s.id = i.status_id where i.sprint_id = sp.id and s.category = 'done') as points_done
+  from sprints sp`;
+
+/** Active first, then planned by start date, then finished (most recent first). */
+export const listSprints = (projectId: string) =>
+  (
+    db()
+      .prepare(`${SPRINT_SELECT} where sp.project_id = ? order by case sp.state when 'active' then 0 when 'planned' then 1 else 2 end, case when sp.state = 'done' then '' else coalesce(sp.start_date, '9999') end, sp.end_date desc, sp.created_at`)
+      .all(projectId) as SprintRow[]
+  ).map(toSprint);
+
+export function getSprint(id: string): Sprint | null {
+  const r = db().prepare(`${SPRINT_SELECT} where sp.id = ?`).get(id) as SprintRow | undefined;
+  return r ? toSprint(r) : null;
+}
+
+export function addSprint(projectId: string, input: { name: string; goal?: string; startDate?: string | null; endDate?: string | null }): Sprint {
+  const id = newId();
+  db().prepare("insert into sprints (id, project_id, name, goal, start_date, end_date, created_at) values (?, ?, ?, ?, ?, ?, ?)").run(id, projectId, input.name, input.goal ?? "", input.startDate ?? null, input.endDate ?? null, now());
+  return getSprint(id)!;
+}
+
+/**
+ * Changes a sprint. Starting one ("active") is refused while another sprint of the project is active:
+ * returns "busy". Finishing one ("done") with `moveOpenTo` sends its unfinished tickets to another
+ * sprint, or back to the backlog with null.
+ */
+export function updateSprint(id: string, patch: { name?: string; goal?: string; startDate?: string | null; endDate?: string | null; state?: SprintState; moveOpenTo?: string | null }): Sprint | "busy" | null {
+  return tx(() => {
+    const s = db().prepare("select * from sprints where id = ?").get(id) as SprintRow | undefined;
+    if (!s) return null;
+    const state = patch.state ?? s.state;
+    if (state === "active" && s.state !== "active" && db().prepare("select 1 from sprints where project_id = ? and state = 'active' and id != ?").get(s.project_id, id)) return "busy";
+    db()
+      .prepare("update sprints set name = ?, goal = ?, start_date = ?, end_date = ?, state = ? where id = ?")
+      .run(patch.name ?? s.name, patch.goal ?? s.goal, patch.startDate !== undefined ? patch.startDate : s.start_date, patch.endDate !== undefined ? patch.endDate : s.end_date, state, id);
+    if (state === "done" && s.state !== "done" && patch.moveOpenTo !== undefined) {
+      db()
+        .prepare("update issues set sprint_id = ?, updated_at = ? where sprint_id = ? and status_id in (select id from statuses where category not in ('done', 'canceled'))")
+        .run(patch.moveOpenTo, now(), id);
+    }
+    return getSprint(id);
+  });
+}
+
+/** Deletes a sprint. Its tickets go back to the backlog. */
+export const deleteSprint = (id: string) => db().prepare("delete from sprints where id = ?").run(id);
+
+// ---- Roadmap
+
+/** Every epic of every project that is not archived, with its project: the roadmap across projects. */
+export function listRoadmap(): RoadmapProject[] {
+  return listProjects()
+    .filter((p) => !p.archived)
+    .map((project) => ({ project, epics: listEpics(project.id), sprints: listSprints(project.id) }));
+}

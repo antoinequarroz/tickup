@@ -201,3 +201,64 @@ describe("statuts et epics", () => {
     expect(store.listAssigned(bob.id)).toEqual([]);
   });
 });
+
+describe("dépendances", () => {
+  it("un ticket connaît ceux qui le bloquent et ceux qu'il bloque, sans boucle possible", () => {
+    const { ana, project } = setup();
+    const [a, b, c] = ["A", "B", "C"].map((title) => store.createIssue(project.id, { title }, ana.id));
+    store.addLink(a.id, b.id);
+    store.addLink(b.id, c.id);
+    store.addLink(a.id, b.id);
+    expect(store.getIssue(b.id)!.blockedBy).toEqual([a.id]);
+    expect(store.getIssue(b.id)!.blocks).toEqual([c.id]);
+    expect(store.wouldBlockLoop(a.id, a.id)).toBe(true);
+    expect(store.wouldBlockLoop(c.id, a.id)).toBe(true);
+    expect(store.wouldBlockLoop(b.id, a.id)).toBe(true);
+    expect(store.wouldBlockLoop(a.id, c.id)).toBe(false);
+    store.removeLink(a.id, b.id);
+    expect(store.getIssue(b.id)!.blockedBy).toEqual([]);
+    store.deleteIssue(c.id);
+    expect(store.getIssue(b.id)!.blocks).toEqual([]);
+  });
+});
+
+describe("sprints", () => {
+  it("compte ses tickets et ses points, et un seul sprint est en cours à la fois", () => {
+    const { ana, project, data } = setup();
+    const done = data.statuses.find((s) => s.category === "done")!;
+    const s1 = store.addSprint(project.id, { name: "Sprint 1", startDate: "2026-11-02", endDate: "2026-11-15" });
+    const s2 = store.addSprint(project.id, { name: "Sprint 2" });
+    const a = store.createIssue(project.id, { title: "A", sprintId: s1.id, estimate: 3 }, ana.id);
+    const b = store.createIssue(project.id, { title: "B", sprintId: s1.id, estimate: 5, startDate: "2026-11-03" }, ana.id);
+    expect(b.sprintId).toBe(s1.id);
+    expect(b.startDate).toBe("2026-11-03");
+    store.updateIssue(a.id, { statusId: done.id });
+    expect(store.getSprint(s1.id)).toMatchObject({ issueCount: 2, doneCount: 1, points: 8, pointsDone: 3, state: "planned" });
+
+    expect(store.updateSprint(s1.id, { state: "active" })).toMatchObject({ state: "active" });
+    expect(store.updateSprint(s2.id, { state: "active" })).toBe("busy");
+    expect(store.listSprints(project.id).map((s) => s.name)).toEqual(["Sprint 1", "Sprint 2"]);
+
+    // Finishing sends what is still open to the next sprint; what is done stays.
+    store.updateSprint(s1.id, { state: "done", moveOpenTo: s2.id });
+    expect(store.getIssue(a.id)!.sprintId).toBe(s1.id);
+    expect(store.getIssue(b.id)!.sprintId).toBe(s2.id);
+    expect(store.updateSprint(s2.id, { state: "active" })).toMatchObject({ state: "active", issueCount: 1 });
+
+    store.deleteSprint(s2.id);
+    expect(store.getIssue(b.id)!.sprintId).toBeNull();
+    expect(store.getProjectData("WEB")!.sprints.map((s) => s.name)).toEqual(["Sprint 1"]);
+  });
+
+  it("la roadmap rassemble les epics et les sprints des projets ouverts", () => {
+    const { ana, project } = setup();
+    store.addSprint(project.id, { name: "Sprint 1" });
+    store.addEpic(project.id, { name: "Refonte", startDate: "2026-11-01", targetDate: "2026-12-15" });
+    const other = store.createProject({ key: "OLD", name: "Ancien", template: "general", leadId: ana.id })!;
+    store.updateProject(other.id, { archived: true });
+    const roadmap = store.listRoadmap();
+    expect(roadmap.map((r) => r.project.key)).toEqual(["WEB"]);
+    expect(roadmap[0].sprints).toHaveLength(1);
+    expect(roadmap[0].epics.map((e) => e.name)).toContain("Refonte");
+  });
+});

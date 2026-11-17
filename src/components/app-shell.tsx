@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, FolderKanban, Inbox, LayoutGrid, Plus, Search, Settings, SquarePen } from "lucide-react";
+import { ArrowUpRight, FolderKanban, Inbox, LayoutGrid, Map as MapIcon, Plus, Search, Settings, SquarePen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -17,6 +17,7 @@ import { Avatar, Kbd, primaryClass } from "./ui";
 const NAV = [
   { href: "/my", label: "Mes tickets", Icon: Inbox },
   { href: "/projects", label: "Projets", Icon: FolderKanban },
+  { href: "/roadmap", label: "Roadmap", Icon: MapIcon },
   { href: "/modules", label: "Suite", Icon: LayoutGrid },
   { href: "/settings", label: "Réglages", Icon: Settings },
 ];
@@ -78,7 +79,7 @@ function Sidebar() {
       <div className="flex items-center gap-2 px-1.5 pb-3">
         <Logo />
         <span className="text-[15px] font-semibold tracking-[-0.01em]">{APP_NAME}</span>
-        <span className="ml-auto rounded-md border border-line px-1.5 py-px font-mono text-[10px] text-ink-3">v0.1</span>
+        <span className="ml-auto rounded-md border border-line px-1.5 py-px font-mono text-[10px] text-ink-3">v0.2</span>
       </div>
 
       <div className="mb-2 flex gap-1.5">

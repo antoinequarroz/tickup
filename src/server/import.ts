@@ -1,0 +1,378 @@
+import "server-only";
+import { suggestKey, templateById, validKey } from "@/lib/templates";
+import { addLink, db, listUsers, newId, wouldBlockLoop } from "./db";
+import { categoryForState, cleanKey, dayOf, epicStateFor, type LinearClient, type LinearComment, LinearError, type LinearIssue, type LinearPerson, type LinearProject, type LinearTeam, type LinearTeamSummary, mapCycles, orderStates, priorityFor } from "./linear";
+
+/**
+ * Import from Linear: one team becomes one project. Everything imported remembers where it comes
+ * from (external_ref "linear:<id>"), so importing again never duplicates, and tickets created in
+ * TickUp are never touched. Importing again only ADDS what is new in Linear: what was already
+ * imported keeps the changes made here, unless `overwrite` asks to take Linear's version again.
+ */
+
+export type ImportOptions = { comments?: boolean; archived?: boolean; overwrite?: boolean };
+
+export type TeamSummary = {
+  teamId: string;
+  teamName: string;
+  projectKey: string;
+  projectName: string;
+  /** False when the project existed from an earlier import. */
+  created: boolean;
+  statuses: number;
+  labels: number;
+  epics: number;
+  sprints: number;
+  issuesCreated: number;
+  issuesUpdated: number;
+  /** Already imported and left as they are here (import without `overwrite`). */
+  issuesKept: number;
+  comments: number;
+  links: number;
+  unmatched: { name: string; email: string | null }[];
+  warnings: string[];
+};
+export type TeamResult = TeamSummary | { teamId: string; teamName: string; error: string };
+
+export type PreviewTeam = { id: string; key: string; name: string; issueCount: number; projectKey: string; existing: boolean };
+
+const ref = (id: string) => `linear:${id}`;
+const MAX_TITLE = 300;
+
+type ProjectRow = { id: string; key: string; name: string; next_number: number };
+
+const importedProject = (teamId: string) => db().prepare("select id, key, name, next_number from projects where external_ref = ?").get(ref(teamId)) as ProjectRow | undefined;
+
+/** The key a team's project gets: its own when valid and free, otherwise a close free one. */
+function freeKey(team: { key: string; name: string }, taken: (key: string) => boolean): string {
+  const base = cleanKey(team.key) || cleanKey(suggestKey(team.name)) || "LIN";
+  if (!taken(base)) return base;
+  for (let n = 2; n < 1000; n++) {
+    const suffix = String(n);
+    const candidate = base.slice(0, 6 - suffix.length) + suffix;
+    if (validKey(candidate) && !taken(candidate)) return candidate;
+  }
+  throw new Error("Aucune clé de projet libre");
+}
+
+const keyTaken = (key: string) => !!db().prepare("select 1 from projects where key = ?").get(key);
+
+/** The teams of the workspace, each with the project key it would get. */
+export async function previewLinear(client: LinearClient): Promise<PreviewTeam[]> {
+  const teams = await client.teams();
+  const reserved = new Set<string>();
+  return teams.map((t: LinearTeamSummary) => {
+    const existing = importedProject(t.id);
+    const projectKey = existing?.key ?? freeKey(t, (k) => reserved.has(k) || keyTaken(k));
+    reserved.add(projectKey);
+    return { id: t.id, key: t.key, name: t.name, issueCount: t.issueCount, projectKey, existing: !!existing };
+  });
+}
+
+export type TeamData = { team: LinearTeam; issues: LinearIssue[]; comments: LinearComment[] };
+
+/** Everything about one team, read from Linear before anything is written. */
+export async function fetchTeam(client: LinearClient, teamId: string, options: ImportOptions = {}): Promise<TeamData> {
+  const team = await client.team(teamId);
+  const issues = await client.issues(teamId, !!options.archived);
+  let comments: LinearComment[] = [];
+  if (options.comments !== false) {
+    // Comments only come with a ticket's first import: no need to read them when every ticket is known.
+    const project = importedProject(teamId);
+    const known = new Set(project ? (db().prepare("select external_ref from issues where project_id = ? and external_ref is not null").all(project.id) as { external_ref: string }[]).map((r) => r.external_ref) : []);
+    if (issues.some((i) => !known.has(ref(i.id)))) comments = await client.comments(teamId, !!options.archived);
+  }
+  return { team, issues, comments };
+}
+
+/**
+ * Writes one team into the database, in one transaction: all or nothing.
+ * `userId` becomes the lead of a newly created project. `today` is "YYYY-MM-DD".
+ */
+export function writeTeam(data: TeamData, userId: string | null, today = new Date().toISOString().slice(0, 10), overwrite = false): TeamSummary {
+  const { team, issues } = data;
+  const conn = db();
+  return conn.transaction((): TeamSummary => {
+    const warnings: string[] = [];
+    const now = new Date().toISOString();
+
+    // People are matched to TickUp accounts by e-mail.
+    const userByEmail = new Map(listUsers().map((u) => [u.email.toLowerCase(), u.id]));
+    const unmatched = new Map<string, { name: string; email: string | null }>();
+    const match = (p: LinearPerson | null): string | null => {
+      if (!p) return null;
+      const id = p.email ? userByEmail.get(p.email.trim().toLowerCase()) : undefined;
+      if (!id) unmatched.set((p.email ?? p.name).toLowerCase(), { name: p.name, email: p.email });
+      return id ?? null;
+    };
+
+    // ---- Project
+    let project = importedProject(team.id);
+    const created = !project;
+    const name = team.name.trim().slice(0, 80) || team.key;
+    if (!project) {
+      const key = freeKey(team, keyTaken);
+      const template = templateById("software");
+      const id = newId();
+      conn.prepare("insert into projects (id, key, name, description, template, lead_id, created_at, external_ref) values (?, ?, ?, ?, ?, ?, ?, ?)").run(id, key, name, team.description, template.id, userId, now, ref(team.id));
+      // Linear has no ticket types: the project starts with the usual ones, none assigned.
+      template.types.forEach((ty, i) => conn.prepare("insert into issue_types (id, project_id, name, icon, position) values (?, ?, ?, ?, ?)").run(newId(), id, ty.name, ty.icon, i));
+      project = { id, key, name, next_number: 1 };
+      if (key !== team.key) warnings.push(`La clé ${team.key} n'était pas disponible : le projet s'appelle ${key}, et ${team.key}-12 devient ${key}-12.`);
+    } else if (overwrite) {
+      conn.prepare("update projects set name = ?, description = ? where id = ?").run(name, team.description, project.id);
+    }
+    const projectId = project.id;
+
+    // ---- Statuses, matched by name, in Linear's order
+    const existingStatuses = conn.prepare("select id, name from statuses where project_id = ? order by position").all(projectId) as { id: string; name: string }[];
+    const statusByName = new Map(existingStatuses.map((s) => [s.name.toLowerCase(), s.id]));
+    const statusOf = new Map<string, string>();
+    const categoryOf = new Map<string, string>();
+    const fromLinear = new Set<string>();
+    orderStates(team.states).forEach((s, i) => {
+      let category = categoryForState(s.type, s.name);
+      if (!category) {
+        category = "backlog";
+        warnings.push(`Statut « ${s.name} » d'un genre inconnu (${s.type}) : rangé dans le backlog.`);
+      }
+      const label = s.name.trim().slice(0, 80) || s.type;
+      let id = statusByName.get(label.toLowerCase());
+      if (id) {
+        if (overwrite) conn.prepare("update statuses set category = ?, position = ? where id = ?").run(category, i, id);
+      } else {
+        id = newId();
+        conn.prepare("insert into statuses (id, project_id, name, category, position) values (?, ?, ?, ?, ?)").run(id, projectId, label, category, created || overwrite ? i : existingStatuses.length + i);
+        statusByName.set(label.toLowerCase(), id);
+      }
+      statusOf.set(s.id, id);
+      fromLinear.add(id);
+    });
+    // Statuses added in TickUp stay, after Linear's.
+    if (overwrite) existingStatuses.filter((s) => !fromLinear.has(s.id)).forEach((s, i) => conn.prepare("update statuses set position = ? where id = ?").run(fromLinear.size + i, s.id));
+    for (const r of conn.prepare("select id, category from statuses where project_id = ?").all(projectId) as { id: string; category: string }[]) categoryOf.set(r.id, r.category);
+    if (!fromLinear.size) throw new LinearError("graphql", `L'équipe ${team.name} n'a aucun statut dans Linear.`);
+    const fallbackStatus = statusOf.values().next().value as string;
+
+    // ---- Labels, matched by name: the team's, plus the workspace ones its tickets carry
+    const labelByName = new Map((conn.prepare("select id, name from labels where project_id = ?").all(projectId) as { id: string; name: string }[]).map((l) => [l.name.toLowerCase(), l.id]));
+    const labelOf = new Map<string, string>();
+    const seenLabels = new Set<string>();
+    for (const l of [...team.labels, ...issues.flatMap((i) => i.labels)]) {
+      const label = l.name.trim().slice(0, 80);
+      if (!label || labelOf.has(l.id)) continue;
+      let id = labelByName.get(label.toLowerCase());
+      if (!id) {
+        id = newId();
+        conn.prepare("insert into labels (id, project_id, name, tone) values (?, ?, ?, ?)").run(id, projectId, label, labelByName.size % 5);
+        labelByName.set(label.toLowerCase(), id);
+      }
+      labelOf.set(l.id, id);
+      seenLabels.add(id);
+    }
+
+    // ---- Linear projects → epics
+    const epicOf = new Map<string, string>();
+    const projects = new Map<string, LinearProject>();
+    for (const i of issues) if (i.project) projects.set(i.project.id, i.project);
+    for (const p of projects.values()) {
+      const values = [p.name.trim().slice(0, 80) || "Projet", p.description, epicStateFor(p.state), dayOf(p.startDate), dayOf(p.targetDate)];
+      let id = (conn.prepare("select id from epics where project_id = ? and external_ref = ?").get(projectId, ref(p.id)) as { id: string } | undefined)?.id;
+      if (id) {
+        if (overwrite) conn.prepare("update epics set name = ?, description = ?, state = ?, start_date = ?, target_date = ? where id = ?").run(...values, id);
+      } else {
+        id = newId();
+        conn.prepare("insert into epics (name, description, state, start_date, target_date, id, project_id, created_at, external_ref) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(...values, id, projectId, now, ref(p.id));
+      }
+      epicOf.set(p.id, id);
+    }
+
+    // ---- Cycles → sprints
+    const sprintOf = new Map<string, string>();
+    // A sprint already in progress here keeps the "active" seat, and a sprint that exists keeps its state:
+    // starting and finishing sprints happens in TickUp once the team works here.
+    let activeTaken = !!conn.prepare("select 1 from sprints where project_id = ? and state = 'active'").get(projectId);
+    for (const s of mapCycles(team.cycles, team.timezone, today)) {
+      let id = (conn.prepare("select id from sprints where project_id = ? and external_ref = ?").get(projectId, ref(s.cycle.id)) as { id: string } | undefined)?.id;
+      let state = s.state;
+      if (state === "active" && !id) {
+        if (activeTaken) {
+          state = "planned";
+          warnings.push(`Le sprint « ${s.name} » est en cours dans Linear, mais un autre sprint est déjà en cours ici : il arrive comme prévu.`);
+        }
+        activeTaken = true;
+      }
+      const values = [s.name.slice(0, 80), s.cycle.description ?? "", s.startDate, s.endDate];
+      if (id) {
+        if (overwrite) conn.prepare("update sprints set name = ?, goal = ?, start_date = ?, end_date = ? where id = ?").run(...values, id);
+      } else {
+        id = newId();
+        conn.prepare("insert into sprints (name, goal, start_date, end_date, state, id, project_id, created_at, external_ref) values (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(...values, state, id, projectId, now, ref(s.cycle.id));
+      }
+      sprintOf.set(s.cycle.id, id);
+    }
+
+    // ---- Tickets
+    type Existing = { id: string; number: number; status_id: string; assignee_id: string | null; external_ref: string | null };
+    const rows = conn.prepare("select id, number, status_id, assignee_id, external_ref from issues where project_id = ?").all(projectId) as Existing[];
+    const known = new Map(rows.filter((r) => r.external_ref).map((r) => [r.external_ref!, r]));
+    const usedNumbers = new Set(rows.map((r) => r.number));
+    let nextNumber = Math.max(project.next_number, ...rows.map((r) => r.number + 1));
+    const bottom = new Map<string, number>();
+    const nextPosition = (statusId: string) => {
+      const at = (bottom.get(statusId) ?? (conn.prepare("select coalesce(max(position), 0) as m from issues where status_id = ?").get(statusId) as { m: number }).m) + 1024;
+      bottom.set(statusId, at);
+      return at;
+    };
+
+    const issueOf = new Map<string, string>();
+    const createdIds = new Set<string>();
+    const renumbered: LinearIssue[] = [];
+    let issuesCreated = 0;
+    let issuesUpdated = 0;
+    let issuesKept = 0;
+    let truncated = 0;
+    const insert = conn.prepare(
+      `insert into issues (id, project_id, number, title, description, status_id, priority, assignee_id, epic_id, estimate, due_date, sprint_id, position, created_by, created_at, updated_at, completed_at, external_ref)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?)`,
+    );
+    const update = conn.prepare("update issues set title = ?, description = ?, status_id = ?, priority = ?, assignee_id = ?, epic_id = ?, estimate = ?, due_date = ?, sprint_id = ?, position = coalesce(?, position), updated_at = ?, completed_at = ? where id = ?");
+    const sorted = [...issues].sort((a, b) => a.number - b.number);
+
+    const write = (i: LinearIssue, number: number | null) => {
+      const statusId = statusOf.get(i.stateId) ?? fallbackStatus;
+      const closed = categoryOf.get(statusId) === "done" || categoryOf.get(statusId) === "canceled";
+      const completedAt = closed ? (i.completedAt ?? i.canceledAt ?? i.updatedAt) : null;
+      const assigneeId = match(i.assignee);
+      const common = [i.title.trim().slice(0, MAX_TITLE) || i.identifier, i.description, statusId, priorityFor(i.priority)];
+      const rest = [i.project ? (epicOf.get(i.project.id) ?? null) : null, typeof i.estimate === "number" ? i.estimate : null, dayOf(i.dueDate), i.cycleId ? (sprintOf.get(i.cycleId) ?? null) : null];
+      const old = known.get(ref(i.id));
+      let id: string;
+      if (old && !overwrite) {
+        // Already here: it keeps what was done to it in TickUp.
+        id = old.id;
+        issuesKept++;
+      } else if (old) {
+        id = old.id;
+        // Someone Linear knows but TickUp does not: keep whoever was assigned here.
+        const assignee = i.assignee && !assigneeId ? old.assignee_id : assigneeId;
+        update.run(...common, assignee, ...rest, old.status_id === statusId ? null : nextPosition(statusId), now, completedAt, id);
+        issuesUpdated++;
+      } else {
+        id = newId();
+        insert.run(id, projectId, number, ...common, assigneeId, ...rest, nextPosition(statusId), i.createdAt, i.updatedAt, completedAt, ref(i.id));
+        usedNumbers.add(number!);
+        createdIds.add(id);
+        issuesCreated++;
+      }
+      issueOf.set(i.id, id);
+      if (i.truncated) truncated++;
+    };
+
+    for (const i of sorted) {
+      // A number already used by a ticket created in TickUp: this one gets a new number, at the end.
+      if (!known.has(ref(i.id)) && (!Number.isInteger(i.number) || i.number < 1 || usedNumbers.has(i.number))) renumbered.push(i);
+      else write(i, i.number);
+    }
+    nextNumber = Math.max(nextNumber, ...sorted.filter((i) => !renumbered.includes(i)).map((i) => i.number + 1));
+    for (const i of renumbered) {
+      while (usedNumbers.has(nextNumber)) nextNumber++;
+      warnings.push(`${i.identifier} devient ${project.key}-${nextNumber} : son numéro était déjà pris par un ticket créé ici.`);
+      write(i, nextNumber++);
+    }
+    // New tickets created in TickUp continue above the highest imported number.
+    conn.prepare("update projects set next_number = ? where id = ?").run(nextNumber, projectId);
+
+    // Parents and labels, once every ticket exists.
+    const setParent = conn.prepare("update issues set parent_id = ? where id = ?");
+    const clearLabels = conn.prepare("delete from issue_labels where issue_id = ?");
+    const addIssueLabel = conn.prepare("insert or ignore into issue_labels (issue_id, label_id) values (?, ?)");
+    for (const i of issues) {
+      const id = issueOf.get(i.id)!;
+      if (!overwrite && !createdIds.has(id)) continue;
+      const parent = i.parentId ? issueOf.get(i.parentId) : undefined;
+      setParent.run(parent && parent !== id ? parent : null, id);
+      clearLabels.run(id);
+      for (const l of i.labels) if (labelOf.has(l.id)) addIssueLabel.run(id, labelOf.get(l.id));
+    }
+    if (truncated) warnings.push(`${truncated} ticket(s) ont plus de 10 étiquettes ou relations dans Linear : seules les 10 premières sont importées.`);
+
+    // ---- "blocks" relations
+    let links = 0;
+    let loops = 0;
+    const hasLink = conn.prepare("select 1 from issue_links where blocker_id = ? and blocked_id = ?");
+    for (const i of issues) {
+      const blocker = issueOf.get(i.id)!;
+      for (const other of i.blocks) {
+        const blocked = issueOf.get(other);
+        if (!blocked || hasLink.get(blocker, blocked)) continue;
+        if (wouldBlockLoop(blocker, blocked)) {
+          loops++;
+          continue;
+        }
+        addLink(blocker, blocked);
+        links++;
+      }
+    }
+    if (loops) warnings.push(`${loops} dépendance(s) ignorée(s) : elles formaient une boucle.`);
+
+    // ---- Comments, only for tickets created by this import
+    let comments = 0;
+    const addComment = conn.prepare("insert into comments (id, issue_id, user_id, body, created_at) values (?, ?, ?, ?, ?)");
+    for (const c of data.comments) {
+      const issueId = issueOf.get(c.issueId);
+      if (!issueId || !createdIds.has(issueId)) continue;
+      const author = match(c.author);
+      // Nobody to attach it to: the author's name goes in the text.
+      const body = author ? c.body : `**${c.author?.name ?? "Linear"}** (dans Linear) :\n\n${c.body}`;
+      addComment.run(newId(), issueId, author, body, c.createdAt);
+      comments++;
+    }
+
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      projectKey: project.key,
+      projectName: name,
+      created,
+      statuses: fromLinear.size,
+      labels: seenLabels.size,
+      epics: epicOf.size,
+      sprints: sprintOf.size,
+      issuesCreated,
+      issuesUpdated,
+      issuesKept,
+      comments,
+      links,
+      unmatched: [...unmatched.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      warnings,
+    };
+  })();
+}
+
+/** Imports the chosen teams one after the other. A team that fails leaves nothing behind. */
+export async function importLinear(client: LinearClient, teamIds: string[], options: ImportOptions, userId: string | null): Promise<TeamResult[]> {
+  const results: TeamResult[] = [];
+  let stopped: string | null = null;
+  for (const teamId of teamIds) {
+    if (stopped) {
+      results.push({ teamId, teamName: "", error: stopped });
+      continue;
+    }
+    let teamName = "";
+    try {
+      const data = await fetchTeam(client, teamId, options);
+      teamName = data.team.name;
+      results.push(writeTeam(data, userId, undefined, options.overwrite === true));
+    } catch (e) {
+      const known = e instanceof LinearError;
+      // The detail of an unexpected error stays in the server log (it never holds the key).
+      if (!known) console.error("Import Linear :", e);
+      const error = known ? e.message : "L'import de cette équipe a échoué. Rien n'a été modifié pour elle.";
+      results.push({ teamId, teamName, error });
+      // A refused key or the rate limit will fail the next teams too.
+      if (known && (e.code === "auth" || e.code === "rate")) stopped = error;
+    }
+  }
+  return results;
+}

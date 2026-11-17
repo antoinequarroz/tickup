@@ -1,7 +1,7 @@
 "use client";
 
 import { Command } from "cmdk";
-import { FolderKanban, Hash, Inbox, LayoutGrid, Plus, Settings, SquarePen } from "lucide-react";
+import { FolderKanban, Hash, Inbox, LayoutGrid, Map as MapIcon, Plus, Settings, SquarePen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
@@ -55,6 +55,9 @@ export function CommandMenu() {
           </Item>
           <Item onSelect={() => run(() => router.push("/my"))} icon={<Inbox className="size-4" />}>
             Mes tickets
+          </Item>
+          <Item onSelect={() => run(() => router.push("/roadmap"))} icon={<MapIcon className="size-4" />}>
+            Roadmap
           </Item>
           <Item onSelect={() => run(() => router.push("/modules"))} icon={<LayoutGrid className="size-4" />}>
             Suite

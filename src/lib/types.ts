@@ -65,6 +65,13 @@ export type Issue = {
   parentId: string | null;
   estimate: number | null;
   dueDate: string | null;
+  /** When work is planned to start: with dueDate, the bar of the ticket on the Gantt. */
+  startDate: string | null;
+  sprintId: string | null;
+  /** Ids of the tickets that must be finished before this one. */
+  blockedBy: string[];
+  /** Ids of the tickets waiting on this one. */
+  blocks: string[];
   /** Order inside a kanban column. */
   position: number;
   labelIds: string[];
@@ -79,14 +86,36 @@ export type Issue = {
 
 export type Comment = { id: string; issueId: string; userId: string | null; body: string; createdAt: string };
 
+export type SprintState = "planned" | "active" | "done";
+
+export type Sprint = {
+  id: string;
+  projectId: string;
+  name: string;
+  goal: string;
+  startDate: string | null;
+  endDate: string | null;
+  state: SprintState;
+  createdAt: string;
+  issueCount: number;
+  doneCount: number;
+  /** Sum of the estimates of its tickets, and of the finished ones. */
+  points: number;
+  pointsDone: number;
+};
+
 export type ProjectData = {
   project: Project;
   statuses: Status[];
   labels: Label[];
   types: IssueType[];
   epics: Epic[];
+  sprints: Sprint[];
   issues: Issue[];
 };
+
+/** One project on the roadmap, with what has dates: its epics and its sprints. */
+export type RoadmapProject = { project: Project; epics: Epic[]; sprints: Sprint[] };
 
 export type ModuleStatus = "core" | "linked" | "soon";
 
