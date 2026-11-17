@@ -382,18 +382,31 @@ export async function importLinear(client: LinearClient, teamIds: string[], opti
 const str = (v: unknown, max: number): string => (typeof v === "string" ? v.slice(0, max) : "");
 const strOrNull = (v: unknown, max: number): string | null => (typeof v === "string" && v ? v.slice(0, max) : null);
 const idOf = (v: unknown): string | null => (typeof v === "string" && /^[A-Za-z0-9-]{1,64}$/.test(v) ? v : null);
-const isoOrNull = (v: unknown): string | null => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null);
+/** A day "2026-11-17" stays a day; a moment is rewritten in UTC, the way TickUp stores them. */
+function isoOrNull(v: unknown): string | null {
+  if (typeof v !== "string" || v.length > 40) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return Number.isNaN(Date.parse(`${v}T00:00:00Z`)) || new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) !== v ? null : v;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})$/.test(v)) return null;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
 const list = (v: unknown, max: number): unknown[] | null => (Array.isArray(v) && v.length <= max ? v : null);
 const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 
 function personFrom(v: unknown): LinearPerson | null {
   const p = obj(v);
-  const name = p ? str(p.name, 120).trim() : "";
-  return p && name ? { name, email: strOrNull(p.email, 200) } : null;
+  const email = p ? strOrNull(p.email, 200) : null;
+  // People are matched by e-mail: a person without a name still counts.
+  const name = p ? str(p.name, 120).trim() || (email ?? "") : "";
+  return p && name ? { name, email } : null;
 }
 
 export const MAX_FILE_ISSUES = 20_000;
 const MAX_TEXT = 200_000;
+/** Ticket numbers stay far from the point where adding one changes nothing. */
+const MAX_NUMBER = 10_000_000;
+/** Each dependency costs a walk through the graph when it is written. */
+const MAX_FILE_LINKS = 20_000;
 
 /**
  * Checks a team export ({ team, issues, comments }, the shape `fetchTeam` returns) coming from outside.
@@ -409,6 +422,7 @@ export function teamDataFrom(input: unknown): TeamData | string {
   if (!teamId || !key || !teamName) return "Fichier illisible : l'équipe n'a pas d'identifiant, de clé ou de nom.";
 
   const states: LinearState[] = [];
+  if ([t.states, t.labels ?? [], t.cycles ?? []].some((v, k) => !list(v, k ? 2000 : 200))) return "Fichier illisible : la liste des statuts, des étiquettes ou des cycles manque ou est trop longue.";
   for (const raw of list(t.states, 200) ?? []) {
     const s = obj(raw);
     const id = s && idOf(s.id);
@@ -425,10 +439,10 @@ export function teamDataFrom(input: unknown): TeamData | string {
     const name = l ? str(l.name, 80).trim() : "";
     return id && name ? { id, name } : null;
   };
-  const labels = (list(t.labels, 2000) ?? []).map(labelFrom).filter((l): l is LinearLabel => !!l);
+  const labels = (list(t.labels ?? [], 2000) ?? []).map(labelFrom).filter((l): l is LinearLabel => !!l);
 
   const cycles: LinearCycle[] = [];
-  for (const raw of list(t.cycles, 2000) ?? []) {
+  for (const raw of list(t.cycles ?? [], 2000) ?? []) {
     const c = obj(raw);
     const id = c && idOf(c.id);
     const startsAt = c && isoOrNull(c.startsAt);
@@ -452,7 +466,10 @@ export function teamDataFrom(input: unknown): TeamData | string {
     if (!i || !id || !createdAt || !stateId) return `Fichier illisible : le ticket ${label} n'a pas d'identifiant, de date de création ou de statut.`;
     if (!stateIds.has(stateId)) return `Fichier illisible : le ticket ${label} a un statut inconnu de l'équipe.`;
     if (seen.has(id)) return `Fichier illisible : le ticket ${label} apparaît deux fois.`;
-    if (!Number.isInteger(i.number) || (i.number as number) < 1) return `Fichier illisible : le ticket ${label} n'a pas de numéro.`;
+    if (!Number.isInteger(i.number) || (i.number as number) < 1 || (i.number as number) > MAX_NUMBER) return `Fichier illisible : le ticket ${label} n'a pas de numéro valide.`;
+    const itsLabels = list(i.labels ?? [], 200);
+    const itsBlocks = list(i.blocks ?? [], 2000);
+    if (!itsLabels || !itsBlocks) return `Fichier illisible : le ticket ${label} a trop d'étiquettes ou de dépendances.`;
     seen.add(id);
     const p = obj(i.project);
     const projectId = p && idOf(p.id);
@@ -475,10 +492,26 @@ export function teamDataFrom(input: unknown): TeamData | string {
       parentId: idOf(i.parentId),
       project: p && projectId ? { id: projectId, name: str(p.name, 200), description: str(p.description, MAX_TEXT), state: str(p.state, 40), startDate: isoOrNull(p.startDate), targetDate: isoOrNull(p.targetDate) } : null,
       cycleId: cycleId && cycleIds.has(cycleId) ? cycleId : null,
-      labels: (list(i.labels, 200) ?? []).map(labelFrom).filter((l): l is LinearLabel => !!l),
-      blocks: (list(i.blocks, 2000) ?? []).map(idOf).filter((b): b is string => !!b),
-      truncated: false,
+      labels: itsLabels.map(labelFrom).filter((l): l is LinearLabel => !!l),
+      blocks: [...new Set(itsBlocks.map(idOf).filter((b): b is string => !!b && b !== id))],
+      truncated: i.truncated === true,
     });
+  }
+
+  if (issues.reduce((n, i) => n + i.blocks.length, 0) > MAX_FILE_LINKS) return `Fichier illisible : plus de ${MAX_FILE_LINKS} dépendances entre tickets.`;
+
+  // A parent chain that comes back to its start (Linear never has one) is cut where it closes.
+  const byId = new Map(issues.map((i) => [i.id, i]));
+  for (const i of issues) if (i.parentId && !byId.has(i.parentId)) i.parentId = null;
+  for (const i of issues) {
+    const walked = new Set([i.id]);
+    for (let at = i; at.parentId; at = byId.get(at.parentId)!) {
+      if (walked.has(at.parentId)) {
+        at.parentId = null;
+        break;
+      }
+      walked.add(at.parentId);
+    }
   }
 
   const rawComments = list(root.comments ?? [], 200_000);

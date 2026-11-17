@@ -487,5 +487,26 @@ describe("import depuis un fichier", () => {
     (noNumber.issues[0] as Record<string, unknown>).number = "1";
     expect(teamDataFrom(noNumber)).toMatch(/numéro/);
     expect(teamDataFrom({ ...file(), issues: "x" })).toMatch(/liste des tickets/);
+    const huge = file();
+    huge.issues[0].number = 2 ** 53;
+    expect(teamDataFrom(huge)).toMatch(/numéro valide/);
+  });
+
+  it("nettoie ce que Linear ne produit jamais : boucle de parents, dates avec décalage, doublons de dépendances", () => {
+    const odd = file() as { team: unknown; issues: Record<string, unknown>[]; comments: Record<string, unknown>[] };
+    odd.issues[0].parentId = "a2";
+    odd.issues[0].blocks = ["a2", "a2", "a1"];
+    odd.issues[0].createdAt = "2026-09-14T18:56:05+02:00";
+    odd.issues[1].dueDate = "2026-02-31";
+    odd.comments[0].createdAt = "2026-09-16 10:00";
+    const data = teamDataFrom(odd);
+    if (typeof data === "string") throw new Error(data);
+    expect(data.issues.filter((i) => i.parentId)).toHaveLength(1);
+    expect(data.issues[0].blocks).toEqual(["a2"]);
+    expect(data.issues[0].createdAt).toBe("2026-09-14T16:56:05.000Z");
+    expect(data.issues[1].dueDate).toBeNull();
+    expect(data.comments.map((c) => c.body)).toEqual(["Premier"]);
+    writeTeam(data, ana!.id, "2026-11-17");
+    expect(store.getProjectData("ANT")!.issues.filter((i) => i.parentId)).toHaveLength(1);
   });
 });

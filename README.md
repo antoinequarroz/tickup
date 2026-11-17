@@ -122,7 +122,7 @@ Dans Réglages → « Importer depuis Linear » (administrateurs). Crée une cl�
 - Les personnes sont reconnues par leur e-mail : crée leurs comptes avant d'importer. Les autres sont listées dans le résultat, et leurs tickets arrivent sans responsable.
 - L'import se relance sans risque : seul ce qui est nouveau dans Linear s'ajoute. Ce qui a déjà été importé (repéré par `external_ref = linear:<id>`) n'est jamais dupliqué et garde les changements faits dans TickUp, sauf si tu coches « Reprendre la version de Linear ». Les tickets créés dans TickUp ne sont pas touchés. Les commentaires n'arrivent qu'à la première importation d'un ticket.
 - Chaque équipe est écrite en une seule transaction : une erreur ne laisse rien à moitié importé.
-- Sans clé : `POST /api/import/linear/file` (administrateur ou `API_TOKEN`) accepte un fichier JSON `{ team, issues, comments }`, les mêmes données que l'import lit dans Linear. Mêmes règles : additif par défaut, `?overwrite=1` pour reprendre la version de Linear, tout ou rien.
+- Sans clé : `POST /api/import/linear/file` (administrateur ou `API_TOKEN`) accepte un fichier JSON `{ team, issues, comments }`, les mêmes données que l'import lit dans Linear. Mêmes règles : additif par défaut, `?overwrite=1` pour reprendre la version de Linear, tout ou rien, 8 Mo au plus.
 - La clé ne sert que le temps de la requête : elle n'est ni enregistrée, ni journalisée. Linear limite le nombre de requêtes par heure ; pour un très gros espace de travail, importe les équipes en plusieurs fois.
 
 Le code : `src/server/linear.ts` (client GraphQL et correspondances), `src/server/import.ts` (écriture en base), `src/app/api/import/linear` (la route).

@@ -7,8 +7,11 @@ import { LinearError } from "@/server/linear";
 
 export const dynamic = "force-dynamic";
 
-/** A whole workspace with its comments stays well under this. */
-const MAX_BYTES = 50 * 1024 * 1024;
+/**
+ * Under the 10 MB Next lets through behind the middleware (beyond, the body arrives cut).
+ * Several thousand tickets with their comments fit; a larger workspace goes team by team.
+ */
+const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
  * Import of a Linear team from a file, for admins: the body is { team, issues, comments }, the data the
@@ -38,7 +41,7 @@ export async function POST(req: Request) {
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    parsed = JSON.parse(Buffer.concat(chunks).toString("utf8").replace(/^\uFEFF/, ""));
   } catch {
     return fail("Fichier illisible : ce n'est pas du JSON.");
   }
