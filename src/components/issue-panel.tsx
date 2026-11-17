@@ -231,14 +231,15 @@ function Prop({ label, children }: { label: string; children: React.ReactNode })
 }
 
 /** A textarea that grows with its text and saves when it loses focus. */
-function useAutosize(value: string) {
+/** Grows a text field with its text. `shown` changes when the field appears again (the description's edit mode). */
+function useAutosize(value: string, shown: unknown = true) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "0px";
     el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
+  }, [value, shown]);
   return ref;
 }
 
@@ -304,7 +305,7 @@ function Description({ issue, onSave }: { issue: Issue; onSave: (description: st
   const [value, setValue] = useState(issue.description);
   // Read formatted, edit as text. An empty description stays a text field, ready to type in.
   const [editing, setEditing] = useState(false);
-  const ref = useAutosize(value);
+  const ref = useAutosize(value, editing);
   const view = useRef<HTMLDivElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   const restore = useRef<{ caret: number; scroller: HTMLElement | null; top: number } | null>(null);
