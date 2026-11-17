@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Inline, parseInline, parseMarkdown, safeHref } from "./markdown";
+import { type Block, type Inline, parseInline, parseMarkdown, safeHref } from "./markdown";
 
 const flat = (nodes: Inline[]): string => nodes.map((n) => (n.type === "text" || n.type === "code" ? n.text : flat(n.children))).join("");
 
@@ -63,5 +63,44 @@ describe("blocs", () => {
     parseMarkdown(`${"*".repeat(20_000)} ${"[".repeat(20_000)} ${"_a".repeat(20_000)} ${"`".repeat(9_999)}`);
     parseMarkdown(Array.from({ length: 5000 }, (_, i) => `${" ".repeat(i % 9)}* point **${i}**`).join("\n"));
     expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
+  it("reste rapide sur les textes tordus signalés en relecture", () => {
+    const cases = ["*a ".repeat(66_000), "_a_b ".repeat(40_000), `# a${" ".repeat(199_990)}b`, `- a\n${" b\n".repeat(66_000)}`, "**a ".repeat(50_000), "~~a ".repeat(50_000)];
+    for (const c of cases) {
+      const t0 = Date.now();
+      parseMarkdown(c);
+      expect(Date.now() - t0, c.slice(0, 12)).toBeLessThan(1500);
+    }
+  });
+
+  it("une suite de lignes sous un point reste un seul texte", () => {
+    const [list] = parseMarkdown("- a\n  b\n  c");
+    expect(list).toMatchObject({ type: "list", items: [{ children: [{ type: "text", text: "a b c" }] }] });
+  });
+
+  it("titres : la fermeture « ## » s'enlève, « C# » reste", () => {
+    expect(parseMarkdown("# C#")[0]).toMatchObject({ type: "heading", children: [{ text: "C#" }] });
+    expect(parseMarkdown("## Titre ##")[0]).toMatchObject({ type: "heading", children: [{ text: "Titre" }] });
+  });
+
+  it("section « >>> » de Linear : une citation qui garde ses paragraphes et listes", () => {
+    const blocks = parseMarkdown("Avant\n\n>>> Agent notes\n\nCandidats :\n\n* un\n* deux\n\n>>>\n\nAprès");
+    expect(blocks.map((b) => b.type)).toEqual(["paragraph", "quote", "paragraph"]);
+    const quote = blocks[1] as Extract<Block, { type: "quote" }>;
+    expect(quote.blocks.map((b) => b.type)).toEqual(["paragraph", "paragraph", "list"]);
+    expect(JSON.stringify(blocks)).not.toContain(">>");
+  });
+});
+
+describe("liens dans les liens", () => {
+  it("une adresse écrite [adresse](<adresse>) donne un seul lien", () => {
+    const u = "https://github.com/a/b/actions/runs/1";
+    expect(parseInline(`Contrôle : [${u}](<${u}>)`)).toEqual([{ type: "text", text: "Contrôle : " }, { type: "link", href: u, children: [{ type: "text", text: u }] }]);
+  });
+
+  it("refuse les caractères invisibles dans une adresse, y compris entre chevrons", () => {
+    expect(safeHref("https://exa\u202emple.ch")).toBeNull();
+    expect(parseInline("<https://a\u200bb.ch>").some((n) => n.type === "link")).toBe(false);
   });
 });

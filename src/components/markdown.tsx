@@ -62,7 +62,7 @@ function Lines({ lines }: { lines: Inline[][] }) {
 const HEADINGS = { 1: "text-[1.25em]", 2: "text-[1.12em]", 3: "text-[1em]" } as const;
 const DEPTHS = ["", "ml-5", "ml-10", "ml-[60px]", "ml-20"];
 
-function BlockView({ block }: { block: Block }) {
+function BlockView({ block }: { block: Block }): React.ReactNode {
   switch (block.type) {
     case "paragraph":
       return (
@@ -105,8 +105,10 @@ function BlockView({ block }: { block: Block }) {
     }
     case "quote":
       return (
-        <blockquote className="border-l-2 border-line-strong pl-3 text-ink-3">
-          <Lines lines={block.lines} />
+        <blockquote className="flex flex-col gap-2 border-l-2 border-line-strong pl-3 text-ink-3">
+          {block.blocks.map((b, i) => (
+            <BlockView key={i} block={b} />
+          ))}
         </blockquote>
       );
     case "code":
