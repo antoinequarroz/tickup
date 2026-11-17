@@ -16,8 +16,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const name = data.name !== undefined ? text(data.name, MAX_NAME) : undefined;
   if (name === null) return fail("Donne un nom au statut");
   if (data.category !== undefined && !validCategory(data.category)) return fail("Catégorie invalide");
-  if (data.position !== undefined && (typeof data.position !== "number" || !Number.isFinite(data.position))) return fail("Position invalide");
-  updateStatus(id, { name, category: data.category as never, position: data.position as number | undefined });
+  updateStatus(id, { name, category: data.category as never });
   publish({ type: "project", projectId }, "all");
   return NextResponse.json({ ok: true });
 }

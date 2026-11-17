@@ -17,6 +17,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (data.state !== undefined && !validEpicState(data.state)) return fail("État invalide");
   const startDate = dateField(data.startDate);
   const targetDate = dateField(data.targetDate);
+  if ((data.startDate !== undefined && startDate === undefined) || (data.targetDate !== undefined && targetDate === undefined)) return fail("Date invalide");
   const description = typeof data.description === "string" ? data.description.slice(0, MAX_DESCRIPTION) : "";
   const id = addEpic(project.id, { name, description, state: data.state as never, startDate, targetDate });
   const epic = listEpics(project.id).find((e) => e.id === id);

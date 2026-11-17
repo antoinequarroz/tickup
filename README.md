@@ -34,7 +34,7 @@ pnpm dev
 Puis ouvrir http://localhost:3000 et créer le premier compte.
 
 ```bash
-pnpm test    # projets, tickets, sous-tickets, statuts, epics
+pnpm test    # projets, tickets, sous-tickets, statuts, epics, dates
 pnpm lint
 pnpm build
 ```

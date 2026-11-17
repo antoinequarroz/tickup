@@ -114,15 +114,19 @@ export function useProject(key: string) {
   const [data, setData] = useState<ProjectData | null>(null);
   const [error, setError] = useState("");
   const idRef = useRef<string | null>(null);
+  const seq = useRef(0);
 
   const load = useCallback(async () => {
+    const mine = ++seq.current;
     try {
       const next = await api<ProjectData>(`/api/projects/${encodeURIComponent(key)}`);
+      // An older answer arriving late must not replace a newer one.
+      if (mine !== seq.current) return;
       idRef.current = next.project.id;
       setData(next);
       setError("");
     } catch (e) {
-      setError((e as Error).message);
+      if (mine === seq.current) setError((e as Error).message);
     }
   }, [key]);
 
@@ -139,7 +143,11 @@ export function useProject(key: string) {
     [listen, load],
   );
 
-  const mutate = useCallback((fn: (d: ProjectData) => ProjectData) => setData((d) => (d ? fn(d) : d)), []);
+  // A change made on screen outdates any load already on its way: the server's event brings a fresh one.
+  const mutate = useCallback((fn: (d: ProjectData) => ProjectData) => {
+    seq.current++;
+    setData((d) => (d ? fn(d) : d));
+  }, []);
 
   return { data, error, reload: load, mutate };
 }

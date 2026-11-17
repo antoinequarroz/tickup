@@ -22,7 +22,9 @@ export function ProjectHeader() {
     { href: `${base}/epics`, label: "Epics", Icon: Layers },
     { href: `${base}/settings`, label: "Réglages", Icon: Settings2 },
   ];
-  const showFilters = pathname === base || pathname === `${base}/list`;
+  // The address may spell the key in lowercase.
+  const at = (href: string) => decodeURIComponent(pathname).toLowerCase() === href.toLowerCase();
+  const showFilters = at(base) || at(`${base}/list`);
   const { project } = data;
 
   return (
@@ -49,7 +51,7 @@ export function ProjectHeader() {
       </div>
       <div className="flex items-center gap-1 px-6 max-md:overflow-x-auto max-md:px-3">
         {tabs.map(({ href, label, Icon }) => {
-          const active = pathname === href;
+          const active = at(href);
           return (
             <Link key={href} href={href} className={cn("relative flex h-9 shrink-0 items-center gap-1.5 px-2 text-[13px] transition-colors", active ? "font-medium text-ink" : "text-ink-3 hover:text-ink")}>
               <Icon className="size-3.5" />

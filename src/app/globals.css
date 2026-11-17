@@ -19,7 +19,7 @@
   --accent-soft: rgba(24, 23, 21, 0.07);
   --ok: #181715;
   --warn: #57544e;
-  --danger: #dc3a2f;
+  --danger: #c62f25;
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 1px 2px rgba(20, 18, 14, 0.06), 0 8px 24px -12px rgba(20, 18, 14, 0.18);
   --grain-opacity: 0.11;
   --grain-blend: multiply;
@@ -46,6 +46,7 @@
     --accent-soft: rgba(243, 241, 236, 0.1);
     --ok: #f3f1ec;
     --warn: #b2aea6;
+    --danger: #ff6b5e;
     --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
     --grain-opacity: 0.07;
     --grain-blend: screen;
@@ -70,6 +71,7 @@
   --accent-soft: rgba(243, 241, 236, 0.1);
   --ok: #f3f1ec;
   --warn: #b2aea6;
+  --danger: #ff6b5e;
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6);
   --grain-opacity: 0.07;
   --grain-blend: screen;
@@ -209,7 +211,7 @@ body::before {
 .tone-0 { background: color-mix(in oklab, var(--ink) 5%, transparent); color: var(--ink-2); }
 .tone-1 { background: color-mix(in oklab, var(--ink) 10%, transparent); color: var(--ink-2); }
 .tone-2 { background: color-mix(in oklab, var(--ink) 18%, transparent); color: var(--ink); }
-.tone-3 { background: color-mix(in oklab, var(--ink) 55%, transparent); color: var(--bg); }
+.tone-3 { background: color-mix(in oklab, var(--ink) 72%, transparent); color: var(--bg); }
 .tone-4 { background: var(--ink); color: var(--bg); }
 .dot-0 { background: color-mix(in oklab, var(--ink) 15%, transparent); }
 .dot-1 { background: color-mix(in oklab, var(--ink) 30%, transparent); }

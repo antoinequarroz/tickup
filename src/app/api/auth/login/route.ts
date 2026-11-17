@@ -15,12 +15,14 @@ export async function POST(req: Request) {
   const state = attempts.get(mail);
   if (state && Date.now() < state.lockedUntil) return fail("Trop d'essais. Réessaie dans quelques minutes.", 429);
 
+  // Counted before the password is checked: attempts sent in parallel each take a turn, none slips past the lock.
+  if (attempts.size > 5000) for (const [k, v] of attempts) if (v.lockedUntil < Date.now() && attempts.size > 2500) attempts.delete(k);
+  const next = { fails: (state?.fails ?? 0) + 1, lockedUntil: 0 };
+  if (next.fails >= MAX_FAILS) Object.assign(next, { fails: 0, lockedUntil: Date.now() + LOCK_MS });
+  attempts.set(mail, next);
+
   const account = getCredentials(mail);
   if (!(await verifyPassword(data.password, account))) {
-    if (attempts.size > 5000) attempts.clear();
-    const next = { fails: (state?.fails ?? 0) + 1, lockedUntil: 0 };
-    if (next.fails >= MAX_FAILS) Object.assign(next, { fails: 0, lockedUntil: Date.now() + LOCK_MS });
-    attempts.set(mail, next);
     await new Promise((r) => setTimeout(r, 400));
     return fail("E-mail ou mot de passe incorrect", 401);
   }

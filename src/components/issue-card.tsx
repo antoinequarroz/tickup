@@ -22,7 +22,11 @@ export function IssueCard({ issue, dragging, onDragStart, onDragEnd }: { issue: 
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={() => openIssue(issue.ref)}
-      onKeyDown={(e) => e.key === "Enter" && openIssue(issue.ref)}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        openIssue(issue.ref);
+      }}
       tabIndex={0}
       role="button"
       aria-label={`${issue.ref} ${issue.title}`}

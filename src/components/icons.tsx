@@ -17,7 +17,7 @@ const TYPE: Record<string, React.ComponentType<LucideProps>> = {
 };
 
 export function TypeIcon({ icon, ...props }: { icon: string } & LucideProps) {
-  const Icon = TYPE[icon] ?? SquareCheck;
+  const Icon = Object.hasOwn(TYPE, icon) ? TYPE[icon] : SquareCheck;
   return <Icon {...props} />;
 }
 

@@ -62,6 +62,7 @@ describe("tickets", () => {
     store.deleteIssue(b.id);
     expect(store.createIssue(project.id, { title: "Trois" }, ana.id).ref).toBe("WEB-3");
     expect(store.getIssue("web-1")?.id).toBe(a.id);
+    expect(store.getIssue(a.id)?.ref).toBe("WEB-1");
   });
 
   it("arrivent dans le premier statut « À faire » et en bas de la colonne", () => {
@@ -142,6 +143,40 @@ describe("statuts et epics", () => {
     expect(store.deleteStatus(first.id, first.id)).toBe(false);
     expect(store.deleteStatus(first.id, second.id)).toBe(true);
     expect(store.getIssue(a.id)!.statusId).toBe(second.id);
+  });
+
+  it("supprimer un statut range ses tickets sous ceux de la cible et met à jour la date de fin", () => {
+    const { project, ana, data } = setup();
+    const todo = data.statuses.find((s) => s.category === "todo")!;
+    const done = data.statuses.find((s) => s.category === "done")!;
+    const there = store.createIssue(project.id, { title: "Déjà fini", statusId: done.id }, ana.id);
+    const a = store.createIssue(project.id, { title: "A", statusId: todo.id }, ana.id);
+    const b = store.createIssue(project.id, { title: "B", statusId: todo.id }, ana.id);
+    expect(store.deleteStatus(todo.id, done.id)).toBe(true);
+    const [ia, ib] = [store.getIssue(a.id)!, store.getIssue(b.id)!];
+    expect(ia.completedAt).not.toBeNull();
+    expect(there.position).toBeLessThan(ia.position);
+    expect(ia.position).toBeLessThan(ib.position);
+  });
+
+  it("changer la catégorie d'un statut ferme ou rouvre ses tickets", () => {
+    const { project, ana, data } = setup();
+    const todo = data.statuses.find((s) => s.category === "todo")!;
+    const a = store.createIssue(project.id, { title: "A", statusId: todo.id }, ana.id);
+    store.updateStatus(todo.id, { category: "done" });
+    expect(store.getIssue(a.id)!.completedAt).not.toBeNull();
+    store.updateStatus(todo.id, { category: "active" });
+    expect(store.getIssue(a.id)!.completedAt).toBeNull();
+  });
+
+  it("l'ordre des statuts se change d'un coup, et seulement avec la liste complète", () => {
+    const { project, data } = setup();
+    const ids = data.statuses.map((s) => s.id);
+    const reversed = [...ids].reverse();
+    expect(store.reorderStatuses(project.id, ids.slice(1))).toBe(false);
+    expect(store.reorderStatuses(project.id, [ids[0], ...ids.slice(0, -1)])).toBe(false);
+    expect(store.reorderStatuses(project.id, reversed)).toBe(true);
+    expect(store.listStatuses(project.id).map((s) => s.id)).toEqual(reversed);
   });
 
   it("l'avancement d'une epic compte ses tickets terminés", () => {

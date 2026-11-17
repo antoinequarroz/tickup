@@ -9,6 +9,8 @@ import { useApp } from "@/lib/store";
 import type { Issue } from "@/lib/types";
 import { cn, positionBetween } from "@/lib/utils";
 
+const byPosition = (a: Issue, b: Issue) => a.position - b.position || a.number - b.number;
+
 /** The kanban: one column per status, tickets dragged from one to another or reordered. */
 export default function BoardPage() {
   const { data, visible, updateIssue } = useProjectCtx();
@@ -16,19 +18,27 @@ export default function BoardPage() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<{ statusId: string; index: number } | null>(null);
 
-  const columns = data.statuses.map((s) => ({ status: s, issues: visible.filter((i) => i.statusId === s.id).sort((a, b) => a.position - b.position) }));
+  const columns = data.statuses.map((s) => ({ status: s, issues: visible.filter((i) => i.statusId === s.id).sort(byPosition) }));
 
   const drop = (statusId: string, index: number) => {
     const issue = data.issues.find((i) => i.id === dragId);
     setDragId(null);
     setOver(null);
     if (!issue) return;
-    const list = columns.find((c) => c.status.id === statusId)!.issues.filter((i) => i.id !== issue.id);
+    const shown = columns.find((c) => c.status.id === statusId)!.issues;
+    const list = shown.filter((i) => i.id !== issue.id);
     // Index counted with the dragged card still in place: correct it when moving down the same column.
-    const from = columns.find((c) => c.status.id === statusId)!.issues.findIndex((i) => i.id === issue.id);
+    const from = shown.findIndex((i) => i.id === issue.id);
     const at = from !== -1 && from < index ? index - 1 : index;
-    const position = positionBetween(list[at - 1]?.position, list[at]?.position);
     if (issue.statusId === statusId && from === at) return;
+    // Neighbours are taken in the whole column, hidden tickets included (filters, sub-tickets),
+    // so the new place never lands on a ticket that is not on screen.
+    const whole = data.issues.filter((i) => i.statusId === statusId && i.id !== issue.id).sort(byPosition);
+    const before = list[at - 1];
+    const next = before ? whole[whole.findIndex((i) => i.id === before.id) + 1] : whole[0];
+    let position = positionBetween(before?.position, next?.position);
+    // Two neighbours at the very same place (old data): go right after the first one.
+    if (before && next && before.position === next.position) position = before.position;
     const patch: Partial<Issue> = { position };
     if (issue.statusId !== statusId) patch.statusId = statusId;
     void updateIssue(issue, patch);
@@ -50,6 +60,11 @@ export default function BoardPage() {
           onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
           onDrop={(e) => {
             e.preventDefault();
+            // Released on the header of its own column, with no place shown: nothing moves.
+            if (over?.statusId !== status.id && data.issues.find((i) => i.id === dragId)?.statusId === status.id) {
+              setDragId(null);
+              return setOver(null);
+            }
             drop(status.id, over?.statusId === status.id ? over.index : issues.length);
           }}
           className={cn("flex w-[290px] shrink-0 flex-col rounded-2xl transition-colors duration-150", over?.statusId === status.id && "drop-target", status.category === "canceled" && "opacity-70")}

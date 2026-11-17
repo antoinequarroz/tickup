@@ -15,16 +15,24 @@ import { Avatar, Button } from "./ui";
 /** The ticket opened from a board, a list or an epic, in a panel on the right (full screen on a phone). */
 export function IssuePanel() {
   const { data, openRef, openIssue } = useProjectCtx();
+  const { newIssue, newProject, commandOpen } = useApp();
+  // A dialog or the command menu sits above the panel: Escape is theirs.
+  const layered = !!newIssue || newProject || commandOpen;
   const issue = openRef ? data.issues.find((i) => i.ref === openRef.toUpperCase()) : undefined;
 
   useEffect(() => {
     if (!openRef) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !(e.target as HTMLElement).closest("[role=listbox]")) openIssue(null);
+      if (e.key !== "Escape" || e.defaultPrevented || layered) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("[role=listbox]")) return;
+      // In a field, Escape first leaves the field (which saves it); a second Escape closes the panel.
+      if (target.closest("input, textarea")) return target.blur();
+      openIssue(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openRef, openIssue]);
+  }, [openRef, openIssue, layered]);
 
   if (!openRef) return null;
   return (
@@ -211,7 +219,10 @@ function useAutosize(value: string) {
 function Title({ issue, onSave }: { issue: Issue; onSave: (title: string) => void }) {
   const [value, setValue] = useState(issue.title);
   const ref = useAutosize(value);
-  useEffect(() => setValue(issue.title), [issue.title]);
+  // A live reload must not wipe what is being typed.
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setValue(issue.title);
+  }, [issue.title, ref]);
   const save = () => {
     const v = value.trim().replace(/\s+/g, " ");
     if (!v) return setValue(issue.title);
@@ -240,7 +251,9 @@ function Title({ issue, onSave }: { issue: Issue; onSave: (title: string) => voi
 function Description({ issue, onSave }: { issue: Issue; onSave: (description: string) => void }) {
   const [value, setValue] = useState(issue.description);
   const ref = useAutosize(value);
-  useEffect(() => setValue(issue.description), [issue.description]);
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setValue(issue.description);
+  }, [issue.description, ref]);
   return (
     <textarea
       ref={ref}
@@ -256,7 +269,10 @@ function Description({ issue, onSave }: { issue: Issue; onSave: (description: st
 
 function Estimate({ value, onSave }: { value: number | null; onSave: (v: number | null) => void }) {
   const [text, setText] = useState(value?.toString() ?? "");
-  useEffect(() => setText(value?.toString() ?? ""), [value]);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (document.activeElement !== input.current) setText(value?.toString() ?? "");
+  }, [value]);
   const save = () => {
     const n = text.trim() === "" ? null : Number(text.replace(",", "."));
     if (n !== null && (Number.isNaN(n) || n < 0)) return setText(value?.toString() ?? "");
@@ -265,7 +281,7 @@ function Estimate({ value, onSave }: { value: number | null; onSave: (v: number 
   return (
     <label className="flex h-8 items-center gap-2 rounded-md px-2 text-[13px] hover:bg-ink/[0.04]">
       <Hash className={cn("size-[14px]", value != null ? "text-ink" : "text-ink-3")} />
-      <input value={text} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} inputMode="decimal" placeholder="Points ou heures" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-3" />
+      <input ref={input} value={text} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} inputMode="decimal" placeholder="Points ou heures" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-3" />
     </label>
   );
 }
@@ -345,6 +361,7 @@ function Comments({ issueId, meId }: { issueId: string; meId: string }) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -362,15 +379,19 @@ function Comments({ issueId, meId }: { issueId: string; meId: string }) {
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text.trim()) return;
+    const sent = text;
+    if (!sent.trim() || sending.current) return;
+    sending.current = true;
     setBusy(true);
     try {
-      await api(`/api/issues/${issueId}/comments`, { method: "POST", json: { body: text } });
-      setText("");
+      await api(`/api/issues/${issueId}/comments`, { method: "POST", json: { body: sent } });
+      // Only clear what was sent: text typed meanwhile stays.
+      setText((t) => (t === sent ? "" : t.startsWith(sent) ? t.slice(sent.length).trimStart() : t));
       await load();
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   };

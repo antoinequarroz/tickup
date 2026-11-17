@@ -9,7 +9,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function POST(req: Request, { params }: Ctx) {
   const me = await currentUser();
   if (!me) return unauthorized();
-  const issue = getIssue(decodeURIComponent((await params).id));
+  const issue = getIssue((await params).id);
   if (!issue) return fail("Ticket introuvable", 404);
   const text_ = text((await body(req)).body, MAX_COMMENT);
   if (!text_) return fail("Le commentaire est vide");

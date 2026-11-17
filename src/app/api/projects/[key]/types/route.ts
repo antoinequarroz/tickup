@@ -14,7 +14,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const data = await body(req);
   const name = text(data.name, 40);
   if (!name) return fail("Donne un nom au type");
-  const icon = typeof data.icon === "string" && data.icon in TYPE_ICONS ? data.icon : "task";
+  const icon = typeof data.icon === "string" && Object.hasOwn(TYPE_ICONS, data.icon) ? data.icon : "task";
   const id = addType(project.id, name, icon);
   publish({ type: "project", projectId: project.id }, "all");
   return NextResponse.json({ id });

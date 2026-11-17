@@ -124,8 +124,10 @@ function Statuses() {
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;
     if (j < 0 || j >= list.length) return;
-    // Swap the two positions.
-    void act(`/api/statuses/${list[i].id}`, "PATCH", { position: list[j].position }).then(() => act(`/api/statuses/${list[j].id}`, "PATCH", { position: list[i].position }));
+    const order = list.map((s) => s.id);
+    [order[i], order[j]] = [order[j], order[i]];
+    // One call, so the order can never be left half changed.
+    void act(`/api/projects/${data.project.key}/statuses`, "PATCH", { order });
   };
 
   const remove = (id: string) => {

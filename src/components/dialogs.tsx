@@ -106,9 +106,10 @@ type Draft = Pick<Issue, "statusId" | "priority" | "assigneeId" | "labelIds" | "
 export function NewIssueDialog({ draft, onClose }: { draft: NewIssueDraft; onClose: () => void }) {
   const { projects } = useApp();
   const open = projects.filter((p) => !p.archived);
-  const [projectKey, setProjectKey] = useState(draft.projectKey ?? open[0]?.key ?? "");
+  // The key comes from the address bar: if it names no project, start from the first one.
+  const [projectKey, setProjectKey] = useState((draft.projectKey && projects.some((p) => p.key === draft.projectKey) ? draft.projectKey : open[0]?.key) ?? "");
 
-  if (!open.length && !draft.projectKey) {
+  if (!projectKey) {
     return (
       <Modal title="Nouveau ticket" onClose={onClose}>
         <p className="text-[13.5px] text-ink-2">Crée d&apos;abord un projet : chaque ticket appartient à un projet.</p>
@@ -130,7 +131,7 @@ export function NewIssueDialog({ draft, onClose }: { draft: NewIssueDraft; onClo
 }
 
 function IssueForm({ projectKey, draft, onClose }: { projectKey: string; draft: NewIssueDraft; onClose: () => void }) {
-  const { data } = useProject(projectKey);
+  const { data, error } = useProject(projectKey);
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -138,7 +139,7 @@ function IssueForm({ projectKey, draft, onClose }: { projectKey: string; draft: 
   const [busy, setBusy] = useState(false);
   const [fields, setFields] = useState<Draft | null>(null);
 
-  if (!data) return <div className="h-40" />;
+  if (!data) return <div className="flex h-40 items-center justify-center text-[13px] text-ink-3">{error && `${error}. Choisis un autre projet ci-dessus.`}</div>;
   const sameProject = draft.projectKey === projectKey;
   const f: Draft = fields ?? {
     statusId: (sameProject && draft.statusId) || data.statuses.find((s) => s.category === "todo")?.id || data.statuses[0].id,

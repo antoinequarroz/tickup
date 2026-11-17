@@ -21,8 +21,6 @@ export const email = (value: unknown) => {
 };
 
 export const MAX_NAME = 80;
-export const MAX_MESSAGE = 8000;
-export const MAX_FILES_PER_MESSAGE = 10;
 export const MAX_TITLE = 300;
 export const MAX_DESCRIPTION = 50_000;
 export const MAX_COMMENT = 10_000;
@@ -30,5 +28,8 @@ export const MAX_COMMENT = 10_000;
 /** A date "2026-11-17", null to clear, undefined when the field is absent. Throws nothing: invalid becomes undefined. */
 export function dateField(value: unknown): string | null | undefined {
   if (value === null || value === "") return null;
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  // Round trip: "2026-02-31" parses but is not a real day.
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value ? value : undefined;
 }

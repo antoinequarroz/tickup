@@ -52,6 +52,11 @@ export function Picker({ options, value, onChange, multiple, noneLabel, placehol
     setUp(r.bottom + pop.current.offsetHeight + 12 > window.innerHeight && r.top > pop.current.offsetHeight);
   }, [open]);
 
+  const active = Math.min(cursor, shown.length - 1);
+  useEffect(() => {
+    if (open) pop.current?.querySelector("[data-active=true]")?.scrollIntoView({ block: "nearest" });
+  }, [open, active]);
+
   const choose = (o: PickerOption) => {
     if (multiple) {
       const next = new Set(selected);
@@ -75,14 +80,15 @@ export function Picker({ options, value, onChange, multiple, noneLabel, placehol
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setCursor((c) => Math.max(c - 1, 0));
-    } else if (e.key === "Enter" && shown[cursor]) {
+    } else if (e.key === "Enter" && shown[active]) {
       e.preventDefault();
-      choose(shown[cursor]);
+      e.stopPropagation();
+      choose(shown[active]);
     }
   };
 
   return (
-    <div ref={root} className={cn("relative", className)} onClick={(e) => e.stopPropagation()}>
+    <div ref={root} className={cn("relative", className)} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && e.stopPropagation()}>
       <button
         type="button"
         aria-label={label}
@@ -125,9 +131,10 @@ export function Picker({ options, value, onChange, multiple, noneLabel, placehol
                 type="button"
                 role="option"
                 aria-selected={selected.has(o.value)}
+                data-active={i === active}
                 onMouseEnter={() => setCursor(i)}
                 onClick={() => choose(o)}
-                className={cn("flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ink-2", i === cursor && "bg-ink/[0.05] text-ink")}
+                className={cn("flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ink-2", i === active && "bg-ink/[0.05] text-ink")}
               >
                 {o.icon && <span className="flex w-4 shrink-0 justify-center">{o.icon}</span>}
                 <span className="min-w-0 flex-1 truncate">{o.label}</span>

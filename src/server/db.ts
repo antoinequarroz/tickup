@@ -258,10 +258,34 @@ export function addStatus(projectId: string, name: string, category: StatusCateg
   return id;
 }
 
-export function updateStatus(id: string, patch: { name?: string; category?: StatusCategory; position?: number }) {
-  const s = db().prepare("select * from statuses where id = ?").get(id) as StatusRow | undefined;
-  if (!s) return;
-  db().prepare("update statuses set name = ?, category = ?, position = ? where id = ?").run(patch.name ?? s.name, patch.category ?? s.category, patch.position ?? s.position, id);
+const closedCategory = (c: string) => c === "done" || c === "canceled";
+
+/** Keeps completed_at true when tickets become closed or open without being edited one by one. */
+function syncCompleted(where: string, param: string, wasClosed: boolean, closed: boolean) {
+  if (wasClosed === closed) return;
+  const t = new Date().toISOString();
+  if (closed) db().prepare(`update issues set completed_at = ?, updated_at = ? where ${where} and completed_at is null`).run(t, t, param);
+  else db().prepare(`update issues set completed_at = null, updated_at = ? where ${where}`).run(t, param);
+}
+
+export function updateStatus(id: string, patch: { name?: string; category?: StatusCategory }) {
+  db().transaction(() => {
+    const s = db().prepare("select * from statuses where id = ?").get(id) as StatusRow | undefined;
+    if (!s) return;
+    const category = patch.category ?? s.category;
+    db().prepare("update statuses set name = ?, category = ? where id = ?").run(patch.name ?? s.name, category, id);
+    syncCompleted("status_id = ?", id, closedCategory(s.category), closedCategory(category));
+  })();
+}
+
+/** Sets the order of the columns. `ids` must be exactly the statuses of the project. */
+export function reorderStatuses(projectId: string, ids: string[]): boolean {
+  return db().transaction(() => {
+    const current = (db().prepare("select id from statuses where project_id = ?").all(projectId) as { id: string }[]).map((r) => r.id);
+    if (ids.length !== current.length || new Set(ids).size !== ids.length || !ids.every((id) => current.includes(id))) return false;
+    ids.forEach((id, i) => db().prepare("update statuses set position = ? where id = ?").run(i, id));
+    return true;
+  })();
 }
 
 /** Deletes a status, moving its tickets to another one. False if it is the last status of the project. */
@@ -270,7 +294,11 @@ export function deleteStatus(id: string, moveTo: string): boolean {
     const s = db().prepare("select * from statuses where id = ?").get(id) as StatusRow | undefined;
     const target = db().prepare("select * from statuses where id = ? and project_id = ?").get(moveTo, s?.project_id) as StatusRow | undefined;
     if (!s || !target || target.id === s.id) return false;
-    db().prepare("update issues set status_id = ? where status_id = ?").run(target.id, s.id);
+    // Moved tickets go below the ones already there, in their own order.
+    const max = (db().prepare("select coalesce(max(position), 0) as m from issues where status_id = ?").get(target.id) as { m: number }).m;
+    const moved = db().prepare("select id from issues where status_id = ? order by position, number").all(s.id) as { id: string }[];
+    syncCompleted("status_id = ?", s.id, closedCategory(s.category), closedCategory(target.category));
+    moved.forEach((row, i) => db().prepare("update issues set status_id = ?, position = ? where id = ?").run(target.id, max + (i + 1) * 1024, row.id));
     db().prepare("delete from statuses where id = ?").run(id);
     return true;
   });
@@ -334,8 +362,8 @@ export const listEpics = (projectId: string) =>
     db()
       .prepare(
         `select e.*,
-          (select count(*) from issues i where i.epic_id = e.id) as issue_count,
-          (select count(*) from issues i join statuses s on s.id = i.status_id where i.epic_id = e.id and s.category in ('done', 'canceled')) as done_count
+          (select count(*) from issues i where i.epic_id = e.id and i.parent_id is null) as issue_count,
+          (select count(*) from issues i join statuses s on s.id = i.status_id where i.epic_id = e.id and i.parent_id is null and s.category in ('done', 'canceled')) as done_count
          from epics e where e.project_id = ? order by case e.state when 'active' then 0 when 'planned' then 1 when 'done' then 2 else 3 end, coalesce(e.target_date, '9999'), e.created_at`,
       )
       .all(projectId) as EpicRow[]
@@ -417,7 +445,7 @@ const toIssue = (r: IssueRow): Issue => ({
   subDone: r.sub_done,
 });
 
-export const listIssues = (projectId: string) => (db().prepare(`${ISSUE_SELECT} where i.project_id = ? order by i.position`).all(projectId) as IssueRow[]).map(toIssue);
+export const listIssues = (projectId: string) => (db().prepare(`${ISSUE_SELECT} where i.project_id = ? order by i.position, i.number`).all(projectId) as IssueRow[]).map(toIssue);
 
 /** Tickets assigned to someone, across every project that is not archived. */
 export const listAssigned = (userId: string) =>
@@ -429,8 +457,10 @@ export const listAssigned = (userId: string) =>
 
 /** A ticket by id or by reference ("WEB-12"). */
 export function getIssue(idOrRef: string): Issue | null {
-  const m = /^([A-Za-z][A-Za-z0-9]{1,5})-(\d+)$/.exec(idOrRef);
-  const r = (m ? db().prepare(`${ISSUE_SELECT} where p.key = ? and i.number = ?`).get(m[1].toUpperCase(), Number(m[2])) : db().prepare(`${ISSUE_SELECT} where i.id = ?`).get(idOrRef)) as IssueRow | undefined;
+  // The id first: a random id can look like a reference.
+  let r = db().prepare(`${ISSUE_SELECT} where i.id = ?`).get(idOrRef) as IssueRow | undefined;
+  const m = r ? null : /^([A-Za-z][A-Za-z0-9]{1,5})-(\d+)$/.exec(idOrRef);
+  if (m) r = db().prepare(`${ISSUE_SELECT} where p.key = ? and i.number = ?`).get(m[1].toUpperCase(), Number(m[2])) as IssueRow | undefined;
   return r ? toIssue(r) : null;
 }
 

@@ -15,7 +15,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const data = await body(req);
   const name = data.name !== undefined ? text(data.name, 40) : undefined;
   if (name === null) return fail("Donne un nom au type");
-  if (data.icon !== undefined && !(typeof data.icon === "string" && data.icon in TYPE_ICONS)) return fail("Icône inconnue");
+  if (data.icon !== undefined && !(typeof data.icon === "string" && Object.hasOwn(TYPE_ICONS, data.icon))) return fail("Icône inconnue");
   updateType(id, { name, icon: data.icon as string | undefined });
   publish({ type: "project", projectId }, "all");
   return NextResponse.json({ ok: true });
