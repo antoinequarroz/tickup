@@ -3,7 +3,7 @@
 # Le Caddy déjà en place occupe les ports 80 et 443 : TickUp passe par lui.
 # Ajoute ce bloc à son Caddyfile, puis recharge-le :
 #
-#   tickup.antoinequarroz.ch {
+#   tickup.postmelo.ch {
 #       encode zstd gzip
 #       header Strict-Transport-Security "max-age=31536000"
 #       reverse_proxy 172.17.0.1:3040 {
