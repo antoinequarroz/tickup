@@ -21,6 +21,8 @@ Remplis au moins :
 
 ```env
 API_TOKEN=<openssl rand -hex 32>
+# Facultatif : relier GitHub (voir « Relier GitHub » dans le README)
+GITHUB_WEBHOOK_SECRET=<openssl rand -hex 32>
 APP_URL=https://tickup.antoinequarroz.ch
 CORDEE_URL=https://cordee.antoinequarroz.ch
 CAIRN_URL=https://cairn.antoinequarroz.ch

@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowUpRight, Ban, ChevronRight, Copy, CornerLeftUp, Hash, Link2, Plus, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Ban, ChevronRight, GitBranch, GitCommitHorizontal, GitPullRequest, Copy, CornerLeftUp, Hash, Link2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
-import type { Comment, Issue } from "@/lib/types";
+import { branchName } from "@/lib/github";
+import type { Comment, GithubLink, Issue } from "@/lib/types";
 import { api, cn, relative } from "@/lib/utils";
 import { AssigneeField, DueField, EpicField, LabelsField, PriorityField, SprintField, StartField, StatusField, TypeField } from "./fields";
 import { PriorityIcon, StatusIcon } from "./icons";
@@ -96,6 +97,22 @@ function IssueDetail({ issue }: { issue: Issue }) {
             <Link2 className="size-4" />
           </IconButton>
           <IconButton
+            label="Copier le nom de branche pour Git"
+            onClick={async () => {
+              const name = branchName(issue.ref, issue.title);
+              try {
+                if (!navigator.clipboard) throw new Error("no clipboard");
+                await navigator.clipboard.writeText(name);
+                toast("Nom de branche copié", { description: "Une branche ou une PR qui porte ce nom se relie au ticket." });
+              } catch {
+                // No clipboard (http, permission refused): show the name, to copy by hand.
+                toast(name, { description: "Copie ce nom de branche à la main : le presse-papiers n'est pas disponible.", duration: 15_000 });
+              }
+            }}
+          >
+            <GitBranch className="size-4" />
+          </IconButton>
+          <IconButton
             label="Copier la référence"
             onClick={() => {
               void navigator.clipboard?.writeText(`${issue.ref} ${issue.title}`);
@@ -120,6 +137,7 @@ function IssueDetail({ issue }: { issue: Issue }) {
 
           <SubIssues parent={issue} subs={subs} />
           <Links issue={issue} />
+          <Github issueId={issue.id} />
           <Comments issueId={issue.id} meId={me.id} />
         </div>
 
@@ -290,6 +308,46 @@ function Estimate({ value, onSave }: { value: number | null; onSave: (v: number 
       <Hash className={cn("size-[14px]", value != null ? "text-ink" : "text-ink-3")} />
       <input ref={input} value={text} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} inputMode="decimal" placeholder="Points ou heures" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-3" />
     </label>
+  );
+}
+
+const PR_STATE: Record<string, string> = { open: "ouverte", draft: "brouillon", merged: "fusionnée", closed: "fermée" };
+
+/** What GitHub says about the ticket: pull requests, branches and commits that name it. Hidden while there is nothing. */
+function Github({ issueId }: { issueId: string }) {
+  const { listen } = useApp();
+  const [links, setLinks] = useState<GithubLink[]>([]);
+
+  const load = useCallback(async () => {
+    try {
+      setLinks((await api<{ github?: GithubLink[] }>(`/api/issues/${issueId}`)).github ?? []);
+    } catch {
+      setLinks([]);
+    }
+  }, [issueId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => listen((e) => ((e.type === "issue" && e.issueId === issueId) || e.type === "resync" ? void load() : undefined)), [listen, load, issueId]);
+
+  if (!links.length) return null;
+  return (
+    <section className="mt-6">
+      <h3 className="border-b border-line pb-2 text-[13px] font-medium">GitHub</h3>
+      {links.map((l) => {
+        const Icon = l.kind === "pr" ? GitPullRequest : l.kind === "branch" ? GitBranch : GitCommitHorizontal;
+        return (
+          <a key={l.id} href={l.url} target="_blank" rel="noreferrer" className="group flex h-9 items-center gap-2 border-b border-line px-1 text-[13px] hover:bg-ink/[0.025]">
+            <Icon className={cn("size-3.5 shrink-0", l.state === "merged" || l.state === "open" ? "text-ink" : "text-ink-3")} />
+            <span className="shrink-0 font-mono text-[11.5px] text-ink-3">{l.kind === "pr" ? `#${l.ref}` : l.kind === "commit" ? l.ref : ""}</span>
+            <span className={cn("min-w-0 flex-1 truncate", l.state === "closed" && "text-ink-3 line-through")}>{l.title || l.ref}</span>
+            {l.kind === "pr" && <span className={cn("shrink-0 rounded-full px-2 py-px text-[11px] font-medium", l.state === "merged" ? "bg-ink text-bg" : l.state === "open" ? "border border-ink text-ink" : "bg-ink/[0.06] text-ink-3")}>{PR_STATE[l.state] ?? l.state}</span>}
+            <span className="hidden max-w-[140px] shrink-0 truncate text-[11.5px] text-ink-3 sm:block">{l.repo.split("/")[1] ?? l.repo}</span>
+            <ArrowUpRight className="size-3.5 shrink-0 text-ink-3 opacity-0 group-hover:opacity-100" />
+          </a>
+        );
+      })}
+    </section>
   );
 }
 

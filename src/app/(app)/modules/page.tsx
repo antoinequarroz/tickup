@@ -64,6 +64,12 @@ export default function ModulesPage() {
           <h2 className="text-[15px] font-medium">Échanges avec la suite</h2>
           <Line on={integrations.apiToken} title="API entrante" text="Les autres outils (Cordée, Hermes, Claude Code, un script) créent et lisent des tickets avec « Authorization: Bearer API_TOKEN »." off="Définis API_TOKEN (24 caractères au moins) dans .env pour l'ouvrir." />
           <Line on={integrations.webhook} title="Événements sortants" text="Chaque ticket créé, modifié, commenté ou supprimé est envoyé en JSON à SUITE_WEBHOOK_URL." off="Définis SUITE_WEBHOOK_URL dans .env pour prévenir un autre outil à chaque changement." />
+          <Line
+            on={integrations.github}
+            title="GitHub"
+            text="Une PR, une branche ou un commit qui nomme un ticket (WEB-12) s'y rattache. Ouvrir la PR passe le ticket en cours, la fusionner le termine. Dans chaque dépôt : Settings, Webhooks, adresse /api/github/webhook de TickUp, type application/json, le secret, événements « Pull requests » et « Pushes »."
+            off="Définis GITHUB_WEBHOOK_SECRET (16 caractères au moins) dans .env, puis ajoute le webhook dans tes dépôts GitHub."
+          />
           <p className="text-[12px] text-ink-3">
             La description de l&apos;API est publique sur <code className="font-mono">/api/suite</code>, le détail est dans le README.
           </p>

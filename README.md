@@ -22,6 +22,7 @@ TickUp fait partie de la même suite que [Cordée](https://github.com/antoinequa
 - **Sprints** : un sprint en cours par projet, avec objectif, dates, avancement en tickets et en points, courbe du reste à faire. À la fin, les tickets ouverts passent au sprint suivant ou reviennent au backlog.
 - **Planning (Gantt)** : chaque ticket est une barre entre son début et son échéance, à déplacer ou étirer à la souris. Les dépendances (« bloqué par », « bloque ») sont des flèches, et un ticket qui commence avant la fin de celui qui le bloque est signalé.
 - **Roadmap** : les epics et les sprints de tous les projets sur une même frise.
+- **GitHub** : PR, branches et commits reliés aux tickets, ticket terminé à la fusion (voir plus bas).
 - **Import depuis Linear** : équipes, statuts, étiquettes, projets, cycles, tickets et commentaires, par l'API de Linear (voir plus bas).
 - **Filtres** : texte, responsable, priorité, étiquette, epic, sprint, type.
 - **Mes tickets** : ce qui m'est attribué, tous projets confondus.
@@ -97,6 +98,21 @@ Avec `SUITE_WEBHOOK_URL`, chaque changement est envoyé en `POST` JSON à cette 
 
 Événements : `project.created|updated|deleted`, `issue.created|updated|deleted|commented`, `epic.created|updated|deleted`. L'envoi ne bloque jamais TickUp : si l'outil d'en face est éteint, l'événement est perdu.
 
+## Relier GitHub
+
+TickUp suit tes dépôts par un webhook, sans jeton ni application à installer.
+
+1. Dans `.env` de TickUp : `GITHUB_WEBHOOK_SECRET=` suivi d'un secret (`openssl rand -hex 32`), puis redémarre.
+2. Dans chaque dépôt GitHub : Settings → Webhooks → Add webhook. Payload URL `https://<ton-tickup>/api/github/webhook`, Content type `application/json`, le même secret, événements « Pull requests » et « Pushes ».
+
+Ensuite :
+
+- Une PR ou un commit qui nomme un ticket en majuscules (`WEB-12`, dans le titre, la description ou le message) apparaît dans le ticket, section GitHub. Une branche aussi, d'après la première référence de son nom, en minuscules si tu veux (`web-12-page-fiche-bien`). Le bouton branche du ticket copie un nom tout prêt.
+- Ouvrir une PR pour un ticket le passe « en cours » s'il n'avait pas commencé.
+- Fusionner la PR dans la branche par défaut termine le ticket, s'il est nommé dans le titre ou la branche de la PR, ou après un mot de fermeture dans sa description (`Fixes WEB-12`, `Closes`, `Resolves`, `Corrige`, `Ferme`). Un commit qui arrive sur la branche par défaut avec un mot de fermeture fait pareil.
+- Un ticket seulement mentionné est relié, jamais déplacé. Un ticket déjà terminé n'est pas rouvert.
+- Une PR venue d'un fork (quelqu'un d'extérieur au dépôt) est reliée mais ne déplace aucun ticket. Le secret vaut pour tous les projets de TickUp : ne branche que des dépôts où tu fais confiance à ceux qui peuvent pousser.
+
 ## Importer depuis Linear
 
 Dans Réglages → « Importer depuis Linear » (administrateurs). Crée une clé dans Linear → Settings → Security & access → Personal API keys, colle-la, choisis les équipes, puis « Importer ».
@@ -127,7 +143,6 @@ Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Cordée dont Ti
 
 ## La suite
 
-- Intégration GitHub (branches et PR liées aux tickets).
 - Une seule connexion pour tous les outils de la suite.
 - Pièces jointes, mentions et notifications.
 
