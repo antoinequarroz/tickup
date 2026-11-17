@@ -1,12 +1,22 @@
 import { cn } from "@/lib/utils";
 
-/** A ticket with a check rising out of it: TickUp. Black and white, like the app. */
-export function Logo({ className }: { className?: string }) {
+/**
+ * A picto from the Postmelo identity kit, in its light and dark variants.
+ * Both images are in the page and CSS shows the one matching the effective theme
+ * (system or forced in Réglages, see .theme-light / .theme-dark in globals.css).
+ */
+export function BrandIcon({ slug, className, alt = "" }: { slug: string; className?: string; alt?: string }) {
   return (
-    <svg viewBox="0 0 28 28" className={cn("size-7", className)} aria-hidden>
-      <rect width="28" height="28" rx="8" fill="var(--ink)" />
-      <path d="M7.5 14.6 12 19l8.6-10" fill="none" stroke="var(--bg)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M17.6 8.2h3.4v3.4" fill="none" stroke="var(--bg)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" opacity=".55" />
-    </svg>
+    <span className={cn("relative inline-block size-7 shrink-0", className)} role={alt ? "img" : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`/brand/${slug}/icon-light-128.png`} alt="" width={128} height={128} draggable={false} className="theme-light absolute inset-0 size-full" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`/brand/${slug}/icon-dark-128.png`} alt="" width={128} height={128} draggable={false} className="theme-dark absolute inset-0 size-full" />
+    </span>
   );
+}
+
+/** TickUp's check, black on light and ivory on dark. */
+export function Logo({ className }: { className?: string }) {
+  return <BrandIcon slug="tickup" className={className} />;
 }
