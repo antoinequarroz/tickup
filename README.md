@@ -116,4 +116,4 @@ Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Cordée dont Ti
 
 ## Déploiement
 
-`deploy/docker-compose.yml` lance TickUp sur le VPS derrière le Caddy déjà en place. Les données vivent dans le volume `tickup-data` : c'est lui qu'il faut sauvegarder.
+`deploy/docker-compose.yml` lance TickUp sur le VPS derrière le Caddy déjà en place : le pas à pas est dans [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md). Les données vivent dans le volume `tickup-data` : c'est lui qu'il faut sauvegarder.
