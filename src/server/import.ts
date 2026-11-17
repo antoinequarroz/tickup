@@ -1,7 +1,7 @@
 import "server-only";
 import { suggestKey, templateById, validKey } from "@/lib/templates";
 import { addLink, db, listUsers, newId, wouldBlockLoop } from "./db";
-import { categoryForState, cleanKey, dayOf, epicStateFor, type LinearClient, type LinearComment, LinearError, type LinearIssue, type LinearPerson, type LinearProject, type LinearTeam, type LinearTeamSummary, mapCycles, orderStates, priorityFor } from "./linear";
+import { categoryForState, cleanKey, dayOf, epicStateFor, type LinearClient, type LinearComment, type LinearCycle, LinearError, type LinearLabel, type LinearState, type LinearIssue, type LinearPerson, type LinearProject, type LinearTeam, type LinearTeamSummary, mapCycles, orderStates, priorityFor } from "./linear";
 
 /**
  * Import from Linear: one team becomes one project. Everything imported remembers where it comes
@@ -375,4 +375,125 @@ export async function importLinear(client: LinearClient, teamIds: string[], opti
     }
   }
   return results;
+}
+
+// ---- Import from a file: the same data, read from Linear by another route than the API key
+
+const str = (v: unknown, max: number): string => (typeof v === "string" ? v.slice(0, max) : "");
+const strOrNull = (v: unknown, max: number): string | null => (typeof v === "string" && v ? v.slice(0, max) : null);
+const idOf = (v: unknown): string | null => (typeof v === "string" && /^[A-Za-z0-9-]{1,64}$/.test(v) ? v : null);
+const isoOrNull = (v: unknown): string | null => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null);
+const list = (v: unknown, max: number): unknown[] | null => (Array.isArray(v) && v.length <= max ? v : null);
+const obj = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+
+function personFrom(v: unknown): LinearPerson | null {
+  const p = obj(v);
+  const name = p ? str(p.name, 120).trim() : "";
+  return p && name ? { name, email: strOrNull(p.email, 200) } : null;
+}
+
+export const MAX_FILE_ISSUES = 20_000;
+const MAX_TEXT = 200_000;
+
+/**
+ * Checks a team export ({ team, issues, comments }, the shape `fetchTeam` returns) coming from outside.
+ * Returns the cleaned data, or a sentence saying what is wrong. Nothing is written here.
+ */
+export function teamDataFrom(input: unknown): TeamData | string {
+  const root = obj(input);
+  const t = root && obj(root.team);
+  if (!root || !t) return "Fichier illisible : il manque l'équipe.";
+  const teamId = idOf(t.id);
+  const key = str(t.key, 20).trim();
+  const teamName = str(t.name, 200).trim();
+  if (!teamId || !key || !teamName) return "Fichier illisible : l'équipe n'a pas d'identifiant, de clé ou de nom.";
+
+  const states: LinearState[] = [];
+  for (const raw of list(t.states, 200) ?? []) {
+    const s = obj(raw);
+    const id = s && idOf(s.id);
+    const name = s ? str(s.name, 80).trim() : "";
+    if (!s || !id || !name) return "Fichier illisible : un statut n'a pas d'identifiant ou de nom.";
+    states.push({ id, name, type: str(s.type, 40), position: typeof s.position === "number" && Number.isFinite(s.position) ? s.position : states.length });
+  }
+  if (!states.length) return "Fichier illisible : l'équipe n'a aucun statut.";
+  const stateIds = new Set(states.map((s) => s.id));
+
+  const labelFrom = (raw: unknown): LinearLabel | null => {
+    const l = obj(raw);
+    const id = l && idOf(l.id);
+    const name = l ? str(l.name, 80).trim() : "";
+    return id && name ? { id, name } : null;
+  };
+  const labels = (list(t.labels, 2000) ?? []).map(labelFrom).filter((l): l is LinearLabel => !!l);
+
+  const cycles: LinearCycle[] = [];
+  for (const raw of list(t.cycles, 2000) ?? []) {
+    const c = obj(raw);
+    const id = c && idOf(c.id);
+    const startsAt = c && isoOrNull(c.startsAt);
+    const endsAt = c && isoOrNull(c.endsAt);
+    if (!c || !id || !startsAt || !endsAt) return "Fichier illisible : un cycle n'a pas d'identifiant ou de dates.";
+    cycles.push({ id, number: typeof c.number === "number" ? c.number : cycles.length + 1, name: strOrNull(c.name, 80), description: strOrNull(c.description, MAX_TEXT), startsAt, endsAt, completedAt: isoOrNull(c.completedAt) });
+  }
+  const cycleIds = new Set(cycles.map((c) => c.id));
+
+  const rawIssues = list(root.issues, MAX_FILE_ISSUES);
+  if (!rawIssues) return `Fichier illisible : la liste des tickets manque ou dépasse ${MAX_FILE_ISSUES} tickets.`;
+  const issues: LinearIssue[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawIssues) {
+    const i = obj(raw);
+    const id = i && idOf(i.id);
+    const title = i ? str(i.title, 1000) : "";
+    const createdAt = i && isoOrNull(i.createdAt);
+    const stateId = i && idOf(i.stateId);
+    const label = i ? str(i.identifier, 40) || id || "?" : "?";
+    if (!i || !id || !createdAt || !stateId) return `Fichier illisible : le ticket ${label} n'a pas d'identifiant, de date de création ou de statut.`;
+    if (!stateIds.has(stateId)) return `Fichier illisible : le ticket ${label} a un statut inconnu de l'équipe.`;
+    if (seen.has(id)) return `Fichier illisible : le ticket ${label} apparaît deux fois.`;
+    if (!Number.isInteger(i.number) || (i.number as number) < 1) return `Fichier illisible : le ticket ${label} n'a pas de numéro.`;
+    seen.add(id);
+    const p = obj(i.project);
+    const projectId = p && idOf(p.id);
+    const cycleId = idOf(i.cycleId);
+    issues.push({
+      id,
+      identifier: label,
+      number: i.number as number,
+      title,
+      description: str(i.description, MAX_TEXT),
+      priority: typeof i.priority === "number" ? i.priority : 0,
+      estimate: typeof i.estimate === "number" && Number.isFinite(i.estimate) ? i.estimate : null,
+      dueDate: isoOrNull(i.dueDate),
+      createdAt,
+      updatedAt: isoOrNull(i.updatedAt) ?? createdAt,
+      completedAt: isoOrNull(i.completedAt),
+      canceledAt: isoOrNull(i.canceledAt),
+      stateId,
+      assignee: personFrom(i.assignee),
+      parentId: idOf(i.parentId),
+      project: p && projectId ? { id: projectId, name: str(p.name, 200), description: str(p.description, MAX_TEXT), state: str(p.state, 40), startDate: isoOrNull(p.startDate), targetDate: isoOrNull(p.targetDate) } : null,
+      cycleId: cycleId && cycleIds.has(cycleId) ? cycleId : null,
+      labels: (list(i.labels, 200) ?? []).map(labelFrom).filter((l): l is LinearLabel => !!l),
+      blocks: (list(i.blocks, 2000) ?? []).map(idOf).filter((b): b is string => !!b),
+      truncated: false,
+    });
+  }
+
+  const rawComments = list(root.comments ?? [], 200_000);
+  if (!rawComments) return "Fichier illisible : la liste des commentaires est trop longue.";
+  const comments: LinearComment[] = [];
+  for (const raw of rawComments) {
+    const c = obj(raw);
+    const issueId = c && idOf(c.issueId);
+    const createdAt = c && isoOrNull(c.createdAt);
+    const text = c ? str(c.body, MAX_TEXT) : "";
+    // A comment on a ticket left out of the file, or an empty one, is skipped.
+    if (!c || !issueId || !createdAt || !text.trim() || !seen.has(issueId)) continue;
+    comments.push({ issueId, body: text, createdAt, author: personFrom(c.author) });
+  }
+  comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  return { team: { id: teamId, key, name: teamName, description: str(t.description, MAX_TEXT), timezone: str(t.timezone, 60) || "UTC", states, labels, cycles }, issues, comments };
 }
