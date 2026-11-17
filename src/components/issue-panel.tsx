@@ -9,6 +9,7 @@ import type { Comment, GithubLink, Issue } from "@/lib/types";
 import { api, cn, relative } from "@/lib/utils";
 import { AssigneeField, DueField, EpicField, LabelsField, PriorityField, SprintField, StartField, StatusField, TypeField } from "./fields";
 import { PriorityIcon, StatusIcon } from "./icons";
+import { Markdown } from "./markdown";
 import { Picker } from "./picker";
 import { useProjectCtx } from "./project-context";
 import { Avatar, Button } from "./ui";
@@ -275,16 +276,47 @@ function Title({ issue, onSave }: { issue: Issue; onSave: (title: string) => voi
 
 function Description({ issue, onSave }: { issue: Issue; onSave: (description: string) => void }) {
   const [value, setValue] = useState(issue.description);
-  const ref = useAutosize(value);
+  // Read formatted, edit as text: an empty description is ready to type in.
+  const [editing, setEditing] = useState(false);
+  const ref = useAutosize(editing ? value : "");
   useEffect(() => {
     if (document.activeElement !== ref.current) setValue(issue.description);
   }, [issue.description, ref]);
+  // Another ticket opened in the same panel starts in reading.
+  useEffect(() => setEditing(false), [issue.id]);
+
+  if (!editing && value.trim())
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Description, cliquer pour modifier"
+        title="Cliquer pour modifier"
+        onClick={() => {
+          // Selecting text to copy it is not a wish to edit.
+          if (!window.getSelection()?.toString()) setEditing(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            setEditing(true);
+          }
+        }}
+        className="-mx-2 mt-3 min-h-[90px] cursor-text rounded-[8px] px-2 py-1 outline-none hover:bg-surface-2/60 focus-visible:ring-2 focus-visible:ring-ink/20"
+      >
+        <Markdown text={value} className="text-[14px] leading-relaxed text-ink-2" />
+      </div>
+    );
   return (
     <textarea
       ref={ref}
+      autoFocus={editing}
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => value !== issue.description && onSave(value)}
+      onBlur={() => {
+        if (value !== issue.description) onSave(value);
+        setEditing(false);
+      }}
       placeholder="Ajoute une description, des liens, une checklist en Markdown…"
       aria-label="Description"
       className="mt-3 min-h-[90px] w-full resize-none bg-transparent text-[14px] leading-relaxed text-ink-2 outline-none placeholder:text-ink-3"
@@ -566,7 +598,7 @@ function Comments({ issueId, meId }: { issueId: string; meId: string }) {
                     </button>
                   )}
                 </p>
-                <p className="mt-0.5 text-[13.5px] leading-relaxed whitespace-pre-wrap text-ink-2">{c.body}</p>
+                <Markdown text={c.body} className="mt-0.5 text-[13.5px] leading-relaxed text-ink-2" />
               </div>
             </div>
           );
