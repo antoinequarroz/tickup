@@ -131,7 +131,7 @@ export type ModuleInfo = {
 };
 
 /** Which links to the rest of the suite are configured (never the secrets themselves). */
-export type Integrations = { apiToken: boolean; webhook: boolean };
+export type Integrations = { apiToken: boolean; webhook: boolean; lamio: boolean };
 
 export type AppState = { me: User; users: User[]; projects: Project[]; modules: ModuleInfo[]; integrations: Integrations };
 

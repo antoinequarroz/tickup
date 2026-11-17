@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 /**
- * What TickUp says about itself to the other tools of the suite (Cordée reads it to show the module).
+ * What TickUp says about itself to the other tools of the suite (Lamio reads it to show the module).
  * Public on purpose: it holds no data, only the description and the shape of the API.
  */
 export function GET() {

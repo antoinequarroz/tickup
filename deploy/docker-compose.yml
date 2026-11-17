@@ -1,4 +1,4 @@
-# TickUp sur le VPS, à côté de Cordée, Cairn et Metricove.
+# TickUp sur le VPS, à côté de Lamio, Cairn et Metricove.
 #
 # Le Caddy déjà en place occupe les ports 80 et 443 : TickUp passe par lui.
 # Ajoute ce bloc à son Caddyfile, puis recharge-le :

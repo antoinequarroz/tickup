@@ -13,12 +13,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /** "Se connecter avec Lamio" is on (LAMIO_URL and LAMIO_SSO_SECRET are set). */
+  const [lamio, setLamio] = useState(false);
 
   useEffect(() => {
-    api<{ needsSetup: boolean }>("/api/auth/status").then(
-      (s) => setSetup(s.needsSetup),
+    api<{ needsSetup: boolean; lamio?: boolean }>("/api/auth/status").then(
+      (s) => {
+        setSetup(s.needsSetup);
+        setLamio(!!s.lamio);
+      },
       () => setSetup(false),
     );
+    // Sent back here when Lamio did not let the person through.
+    if (new URLSearchParams(window.location.search).get("lamio") === "refus") {
+      setError("Lamio n'a pas pu te connecter. Réessaie, ou utilise ton mot de passe.");
+      window.history.replaceState(null, "", "/login");
+    }
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -51,6 +61,19 @@ export default function LoginPage() {
         <Button variant="primary" className="mt-4 w-full" disabled={busy || !email || !password || (setup && (!name.trim() || password.length < 10))}>
           {busy ? "Un instant…" : setup ? "Créer mon compte" : "Se connecter"}
         </Button>
+        {lamio && (
+          <>
+            <div className="my-4 flex items-center gap-3 text-[11.5px] text-ink-3">
+              <span className="h-px flex-1 bg-line" />
+              ou
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            {/* A plain link: the sign-in goes through Lamio and comes back with a session. */}
+            <a href="/api/auth/lamio/start" className="press flex h-9 w-full items-center justify-center rounded-lg border border-line-strong bg-surface text-[13.5px] font-medium shadow-card hover:bg-surface-2">
+              Se connecter avec Lamio
+            </a>
+          </>
+        )}
       </form>
     </div>
   );

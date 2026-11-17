@@ -197,6 +197,21 @@ export function createFirstUser(input: { email: string; name: string; salt: stri
   return tx(() => (countUsers() > 0 ? null : createUser({ ...input, role: "admin" })));
 }
 
+/**
+ * The TickUp account of someone Lamio vouches for, matched by e-mail. The first time, the account
+ * is created: administrator if they are one in Lamio, or if TickUp has no account yet. Its password
+ * is random and unknown: they come in through Lamio, until they set one in Réglages.
+ * An account that already exists keeps its role.
+ */
+export function lamioAccount(input: { email: string; name: string; admin: boolean }): User {
+  return tx(() => {
+    const existing = getCredentials(input.email);
+    if (existing) return existing.user;
+    const unknown = () => crypto.randomBytes(32).toString("hex");
+    return createUser({ email: input.email, name: input.name, role: input.admin || countUsers() === 0 ? "admin" : "member", salt: unknown(), hash: unknown() })!;
+  });
+}
+
 export const renameUser = (id: string, name: string) => db().prepare("update users set name = ? where id = ?").run(name.trim(), id);
 
 export function setUserPassword(id: string, salt: string, hash: string) {

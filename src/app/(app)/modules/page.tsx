@@ -18,7 +18,7 @@ export default function ModulesPage() {
   const { modules, integrations } = useApp();
   return (
     <>
-      <PageHeader title="Suite" subtitle="TickUp est le module de gestion de projet de la suite. Cordée en est la base." />
+      <PageHeader title="Suite" subtitle="TickUp est le module de gestion de projet de la suite. Lamio en est la base." />
       <div className="scroll-thin flex-1 overflow-y-auto p-7 max-md:p-4">
         <div className="mx-auto grid max-w-[860px] gap-3 sm:grid-cols-2">
           {modules.map((m, i) => {
@@ -58,11 +58,12 @@ export default function ModulesPage() {
           })}
         </div>
         <p className="mx-auto mt-5 max-w-[860px] text-[12.5px] text-ink-3">
-          Pour brancher un outil, indique son adresse dans le fichier .env (CORDEE_URL, CAIRN_URL, METRICOVE_URL, ALFRED_URL, NINO_URL). Il apparaît alors ici et dans la barre de gauche.
+          Pour brancher un outil, indique son adresse dans le fichier .env (LAMIO_URL, CAIRN_URL, METRICOVE_URL, ALFRED_URL, NINO_URL). Il apparaît alors ici et dans la barre de gauche.
         </p>
         <Card className="mx-auto mt-5 flex max-w-[860px] flex-col gap-3">
           <h2 className="text-[15px] font-medium">Échanges avec la suite</h2>
-          <Line on={integrations.apiToken} title="API entrante" text="Les autres outils (Cordée, Hermes, Claude Code, un script) créent et lisent des tickets avec « Authorization: Bearer API_TOKEN »." off="Définis API_TOKEN (24 caractères au moins) dans .env pour l'ouvrir." />
+          <Line on={integrations.lamio} title="Connexion avec Lamio" text="On entre dans TickUp avec son compte Lamio, sans autre mot de passe. Lamio décide qui y a accès." off="Définis LAMIO_URL et LAMIO_SSO_SECRET (32 caractères au moins, le même que TICKUP_SSO_SECRET dans Lamio) dans .env." />
+          <Line on={integrations.apiToken} title="API entrante" text="Les autres outils (Lamio, Hermes, Claude Code, un script) créent et lisent des tickets avec « Authorization: Bearer API_TOKEN »." off="Définis API_TOKEN (24 caractères au moins) dans .env pour l'ouvrir." />
           <Line on={integrations.webhook} title="Événements sortants" text="Chaque ticket créé, modifié, commenté ou supprimé est envoyé en JSON à SUITE_WEBHOOK_URL." off="Définis SUITE_WEBHOOK_URL dans .env pour prévenir un autre outil à chaque changement." />
           <p className="text-[12px] text-ink-3">
             La description de l&apos;API est publique sur <code className="font-mono">/api/suite</code>, le détail est dans le README.

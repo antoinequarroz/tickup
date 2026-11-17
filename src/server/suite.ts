@@ -7,7 +7,7 @@ import { publish } from "./events";
  *
  * In:  the other tools call the REST API with "Authorization: Bearer <API_TOKEN>" (see README).
  * Out: every change is pushed live to open TickUp tabs (Server-Sent Events) and, when
- *      SUITE_WEBHOOK_URL is set, posted as JSON to that address so Cordée, Hermes or a script
+ *      SUITE_WEBHOOK_URL is set, posted as JSON to that address so Lamio, Hermes or a script
  *      can react (post in a channel, notify someone, sync a calendar…).
  */
 export type SuiteEvent =

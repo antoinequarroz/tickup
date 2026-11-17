@@ -2,7 +2,7 @@
 
 La gestion de projet de la suite. Projets, epics, tickets et sous-tickets, en kanban ou en liste : de quoi remplacer Linear, pour une vidéo comme pour du code.
 
-TickUp fait partie de la même suite que [Cordée](https://github.com/antoinequarroz/maya-teams) (messagerie, la base), [Cairn](https://github.com/antoinequarroz/Cairn) (notes et coffre), [Metricove](https://github.com/antoinequarroz/metricove_v2) (réseaux sociaux) et [Alfred](https://github.com/antoinequarroz/Alfred) (calendrier) : même stack, même design, une autre couleur. Ici, le noir et blanc.
+TickUp fait partie de la même suite que [Lamio](https://github.com/antoinequarroz/lamio) (messagerie, la base), [Cairn](https://github.com/antoinequarroz/Cairn) (notes et coffre), [Metricove](https://github.com/antoinequarroz/metricove_v2) (réseaux sociaux) et [Alfred](https://github.com/antoinequarroz/Alfred) (calendrier) : même stack, même design, une autre couleur. Ici, le noir et blanc.
 
 ![Le tableau](docs/img/kanban.png)
 ![Un ticket et ses sous-tickets](docs/img/ticket.png)
@@ -28,7 +28,7 @@ TickUp fait partie de la même suite que [Cordée](https://github.com/antoinequa
 - **Réglages par projet** : statuts (nom, catégorie, ordre), étiquettes (cinq teintes du gris au noir), types et icônes, archivage.
 - **En direct** : un changement fait ailleurs s'affiche sans recharger.
 - **Clavier** : `⌘K` pour tout trouver (taper `WEB-12` ouvre le ticket), `C` pour créer un ticket.
-- **Comptes** : comme dans Cordée, la première personne crée son compte et devient administratrice, puis ajoute les membres dans Réglages.
+- **Comptes** : comme dans Lamio, la première personne crée son compte et devient administratrice, puis ajoute les membres dans Réglages.
 - **Clair et sombre**, installable sur Mac et iPhone.
 
 ## Lancer en local
@@ -48,11 +48,13 @@ pnpm build
 
 ## Brancher TickUp à la suite
 
-Trois liens, tous réglés dans `.env` (voir `.env.example`). L'état de chacun s'affiche dans la page « Suite ».
+Quatre liens, tous réglés dans `.env` (voir `.env.example`). L'état de chacun s'affiche dans la page « Suite ».
 
-### 1. Dans Cordée
+### 1. Dans Lamio
 
-Cordée liste TickUp dans ses modules. Il suffit de lui donner l'adresse : `TICKUP_URL=https://tickup.antoinequarroz.ch` dans le `.env` de Cordée. Dans l'autre sens, `CORDEE_URL`, `CAIRN_URL`, etc. dans le `.env` de TickUp affichent les autres outils dans sa barre de gauche.
+Lamio liste TickUp dans ses modules. Il suffit de lui donner l'adresse : `TICKUP_URL=https://tickup.antoinequarroz.ch` dans le `.env` de Lamio. Dans l'autre sens, `LAMIO_URL`, `CAIRN_URL`, etc. dans le `.env` de TickUp affichent les autres outils dans sa barre de gauche.
+
+**Une seule connexion.** Avec un secret partagé en plus (`TICKUP_SSO_SECRET` dans Lamio, `LAMIO_SSO_SECRET` ici, le même, 32 caractères au moins), la page de connexion propose « Se connecter avec Lamio » et le lien de Lamio ouvre TickUp déjà connecté. Lamio décide qui entre : ses administrateurs, et les membres cochés dans Modules → Accès. La personne est retrouvée par son e-mail ; la première fois, son compte TickUp est créé (administrateur si elle l'est dans Lamio). Les mots de passe de TickUp continuent de marcher. Le code : `src/server/lamio.ts` et `src/app/api/auth/lamio`.
 
 ### 2. L'API (les autres outils écrivent dans TickUp)
 
@@ -112,7 +114,7 @@ Le code : `src/server/linear.ts` (client GraphQL et correspondances), `src/serve
 
 ## Comment c'est fait
 
-Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Cordée dont TickUp reprend le socle (comptes, sessions, thème, briques d'interface).
+Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Lamio dont TickUp reprend le socle (comptes, sessions, thème, briques d'interface).
 
 | Dossier | Contenu |
 | --- | --- |
@@ -128,7 +130,6 @@ Next.js 15, React 19, Tailwind 4, SQLite (better-sqlite3), comme Cordée dont Ti
 ## La suite
 
 - Intégration GitHub (branches et PR liées aux tickets).
-- Une seule connexion pour tous les outils de la suite.
 - Pièces jointes, mentions et notifications.
 
 ## Déploiement

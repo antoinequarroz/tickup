@@ -1,6 +1,6 @@
 # Mettre TickUp en ligne sur le VPS
 
-À la fin de ce guide : **https://tickup.antoinequarroz.ch**. Même principe que Cairn et Cordée : TickUp tourne dans Docker et passe par le Caddy de Metricove, qui tient déjà les ports 80 et 443.
+À la fin de ce guide : **https://tickup.antoinequarroz.ch**. Même principe que Cairn et Lamio : TickUp tourne dans Docker et passe par le Caddy de Metricove, qui tient déjà les ports 80 et 443.
 
 Ce guide n'a pas encore été déroulé sur le VPS : les commandes sont celles de Cairn, adaptées.
 
@@ -22,7 +22,8 @@ Remplis au moins :
 ```env
 API_TOKEN=<openssl rand -hex 32>
 APP_URL=https://tickup.antoinequarroz.ch
-CORDEE_URL=https://cordee.antoinequarroz.ch
+LAMIO_URL=https://lamio.antoinequarroz.ch
+LAMIO_SSO_SECRET=<openssl rand -base64 48, le même que TICKUP_SSO_SECRET dans Lamio>
 CAIRN_URL=https://cairn.antoinequarroz.ch
 ```
 
@@ -62,7 +63,7 @@ Si Caddy répond « 502 » : `host.docker.internal` ne correspond pas à `172.17
 
 Ouvre https://tickup.antoinequarroz.ch **tout de suite** et crée ton compte : la première personne qui arrive devient administratrice. Ajoute ensuite les membres dans Réglages.
 
-Dans le `.env` de Cordée, ajoute `TICKUP_URL=https://tickup.antoinequarroz.ch` pour que TickUp apparaisse dans ses modules.
+Dans le `.env` de Lamio, ajoute `TICKUP_URL=https://tickup.antoinequarroz.ch` pour que TickUp apparaisse dans ses modules, et `TICKUP_SSO_SECRET` (le même secret que `LAMIO_SSO_SECRET` ici) pour qu'on y entre avec son compte Lamio.
 
 ## 5. Sauvegardes
 

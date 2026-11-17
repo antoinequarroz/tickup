@@ -262,3 +262,24 @@ describe("sprints", () => {
     expect(roadmap[0].epics.map((e) => e.name)).toContain("Refonte");
   });
 });
+
+describe("connexion avec Lamio", () => {
+  it("retrouve le compte par son e-mail, sans toucher à son rôle", () => {
+    const { bob } = setup();
+    expect(store.lamioAccount({ email: "bob@exemple.ch", name: "Robert", admin: true })).toMatchObject({ id: bob.id, name: "Bob", role: "member" });
+    expect(store.countUsers()).toBe(2);
+  });
+
+  it("crée le compte à la première venue, avec le rôle tenu dans Lamio", () => {
+    setup();
+    expect(store.lamioAccount({ email: "cleo@exemple.ch", name: "Cleo", admin: false })).toMatchObject({ name: "Cleo", role: "member" });
+    expect(store.lamioAccount({ email: "dan@exemple.ch", name: "Dan", admin: true }).role).toBe("admin");
+    // Created without a known password: nobody signs in with one until it is set.
+    expect(store.getCredentials("cleo@exemple.ch")?.hash).toHaveLength(64);
+  });
+
+  it("dans un TickUp vide, la première personne devient administratrice", () => {
+    expect(store.lamioAccount({ email: "ana@exemple.ch", name: "Ana", admin: false }).role).toBe("admin");
+    expect(store.lamioAccount({ email: "bob@exemple.ch", name: "Bob", admin: false }).role).toBe("member");
+  });
+});

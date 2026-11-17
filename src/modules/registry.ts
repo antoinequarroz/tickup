@@ -1,7 +1,7 @@
 import type { ModuleInfo } from "@/lib/types";
 
 /**
- * The suite, seen from TickUp. Same list and same levels as in Cordée (the base of the suite):
+ * The suite, seen from TickUp. Same list and same levels as in Lamio (the messaging app, base of the suite):
  *  - "core"   : TickUp itself (project management).
  *  - "linked" : the tool runs at its own address (set its URL in .env), TickUp links to it.
  *  - "soon"   : planned, not plugged in yet.
@@ -20,11 +20,11 @@ const MODULES: ModuleDef[] = [
   },
   {
     id: "messagerie",
-    name: "Cordée",
+    name: "Lamio",
     role: "Messagerie",
     description: "La base de la suite : canaux, messages directs, fichiers.",
     icon: "messages",
-    env: "CORDEE_URL",
+    env: "LAMIO_URL",
   },
   {
     id: "notes",

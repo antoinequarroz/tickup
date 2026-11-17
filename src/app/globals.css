@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Design tokens, shared with Cordée, Cairn and Metricove: only the accent changes.
+/* Design tokens, shared with Lamio, Cairn and Metricove: only the accent changes.
    TickUp is the black and white one: the accent is the ink itself (black in light, white in dark).
    Light is the default, dark follows the system, and Réglages can force either one
    with data-theme="light" | "dark" on <html>. */

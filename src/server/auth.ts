@@ -27,7 +27,7 @@ export async function endSession(res: NextResponse) {
 
 /**
  * True when the request carries "Authorization: Bearer <API_TOKEN>": the other tools of the suite
- * (Cordée, Hermes, Claude Code, a script) talk to TickUp this way. Compared in constant time.
+ * (Lamio, Hermes, Claude Code, a script) talk to TickUp this way. Compared in constant time.
  */
 export function validApiToken(authorization: string | null | undefined) {
   const expected = process.env.API_TOKEN;
