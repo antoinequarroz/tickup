@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Ban, ChevronRight, GitBranch, GitCommitHorizontal, GitPullRequest, Copy, CornerLeftUp, Hash, Link2, Plus, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Ban, Bell, BellOff, ChevronRight, GitBranch, GitCommitHorizontal, GitPullRequest, Copy, CornerLeftUp, Hash, Link2, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
@@ -94,6 +94,7 @@ function IssueDetail({ issue }: { issue: Issue }) {
         )}
         <span className="font-mono text-[12.5px] font-medium">{issue.ref}</span>
         <div className="ml-auto flex items-center gap-0.5">
+          {!me.agent && <WatchButton issue={issue} />}
           <IconButton label="Copier le lien" onClick={copyLink}>
             <Link2 className="size-4" />
           </IconButton>
@@ -212,6 +213,37 @@ const isDescendant = (issues: Issue[], id: string, ancestor: string): boolean =>
   }
   return false;
 };
+
+/** Follow a ticket: be notified when its status changes. */
+function WatchButton({ issue }: { issue: Issue }) {
+  const [watching, setWatching] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    api<{ watching: boolean }>(`/api/issues/${issue.id}/watch`).then(
+      (r) => live && setWatching(r.watching),
+      () => live && setWatching(null),
+    );
+    return () => {
+      live = false;
+    };
+    // The assignee follows by default: a new assignee can change it.
+  }, [issue.id, issue.assigneeId]);
+  if (watching === null) return null;
+  const toggle = async () => {
+    try {
+      const r = await api<{ watching: boolean }>(`/api/issues/${issue.id}/watch`, { method: "PUT", json: { watching: !watching } });
+      setWatching(r.watching);
+      toast(r.watching ? `Tu suis ${issue.ref}` : `Tu ne suis plus ${issue.ref}`, { description: r.watching ? "Tu seras prévenu quand son statut change." : undefined });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  return (
+    <IconButton label={watching ? "Ne plus suivre" : "Suivre ce ticket"} onClick={toggle}>
+      {watching ? <Bell className="size-4 text-ink" /> : <BellOff className="size-4" />}
+    </IconButton>
+  );
+}
 
 function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (

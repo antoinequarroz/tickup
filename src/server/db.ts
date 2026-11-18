@@ -191,6 +191,30 @@ export function db() {
   addColumn("sprints", "external_ref", "text");
   // An AI agent's account: it never signs in, it acts through its API key.
   addColumn("users", "agent", "integer not null default 0");
+  // Notifications by e-mail too, when the person asked for it (never by default).
+  addColumn("users", "notify_email", "integer not null default 0");
+  conn.exec(`
+    create table if not exists issue_watchers (
+      issue_id text not null references issues (id) on delete cascade,
+      user_id text not null references users (id) on delete cascade,
+      -- 0: unfollowed by hand, so being assigned or commenting again does not follow it back.
+      following integer not null default 1,
+      primary key (issue_id, user_id)
+    );
+    create table if not exists notifications (
+      id text primary key,
+      user_id text not null references users (id) on delete cascade,
+      issue_id text not null references issues (id) on delete cascade,
+      kind text not null,
+      actor_id text references users (id) on delete set null,
+      data text not null default '{}',
+      -- Set for what must happen once only (the reminder of a due date): a second one is ignored.
+      dedupe text unique,
+      created_at text not null,
+      read_at text
+    );
+    create index if not exists notifications_user on notifications (user_id, created_at);
+  `);
   conn.exec("create index if not exists issues_sprint on issues (sprint_id); create index if not exists issues_external on issues (external_ref)");
   globalForDb.__tickupDb = { dir, conn };
   return conn;
@@ -202,8 +226,8 @@ const tx = <T>(fn: () => T) => db().transaction(fn)();
 
 // ---- Users
 
-type UserRow = { id: string; email: string; name: string; role: Role; salt: string; password_hash: string; created_at: string; agent: number };
-export const toUser = (r: UserRow): User => ({ id: r.id, email: r.email, name: r.name, role: r.role, createdAt: r.created_at, agent: !!r.agent });
+type UserRow = { id: string; email: string; name: string; role: Role; salt: string; password_hash: string; created_at: string; agent: number; notify_email: number };
+export const toUser = (r: UserRow): User => ({ id: r.id, email: r.email, name: r.name, role: r.role, createdAt: r.created_at, agent: !!r.agent, notifyEmail: !!r.notify_email });
 
 export const countUsers = () => (db().prepare("select count(*) as n from users").get() as { n: number }).n;
 

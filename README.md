@@ -88,6 +88,8 @@ curl https://tickup.antoinequarroz.ch/api/issues/POD-12 -H "Authorization: Beare
 | `POST /api/issues/{id ou CLÉ-12}/comments` | Commenter |
 | `POST /api/projects/{CLÉ}/epics`, `PATCH, DELETE /api/epics/{id}` | Epics |
 | `GET /api/my-issues` | Mes tickets ouverts |
+| `GET /api/notifications`, `POST /api/notifications/read` | Mes notifications ; `{ "ids": [...] }` ou `{ "all": true }` pour les marquer lues |
+| `GET, PUT /api/issues/{id ou CLÉ-12}/watch` | Suivre un ticket : `{ "watching": true }` |
 | `GET /api/suite` | Public : la description du module et de son API |
 
 Le jeton agit au nom du premier compte administrateur.
@@ -107,6 +109,17 @@ Avec `SUITE_WEBHOOK_URL`, chaque changement est envoyé en `POST` JSON à cette 
 ```
 
 Événements : `project.created|updated|deleted`, `issue.created|updated|deleted|commented`, `epic.created|updated|deleted`. L'envoi ne bloque jamais TickUp : si l'outil d'en face est éteint, l'événement est perdu.
+
+## Notifications
+
+La cloche (« Notifications » dans la barre de gauche) prévient, en direct :
+
+* quand on t'attribue un ticket ;
+* quand on te mentionne dans un commentaire avec `@Prénom Nom` (ou `@Prénom` s'il est unique) ;
+* quand un ticket que tu suis change de statut, GitHub compris. Le créateur et la personne assignée suivent un ticket, comme qui l'a commenté. Le bouton cloche du ticket permet de le suivre ou de ne plus le suivre ;
+* la veille d'une échéance d'un ticket qui t'est attribué (dès 8 h, heure suisse).
+
+Jamais pour ce que tu as fait toi-même, jamais pour un agent IA. Par e-mail aussi si tu le choisis dans Réglages, quand `SMTP_URL` et `MAIL_FROM` sont définis (voir `.env.example`).
 
 ## Relier GitHub
 

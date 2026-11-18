@@ -382,7 +382,7 @@ export const TOOLS: Tool[] = [
       const input = issueFields(a, c, me, { creating: true });
       if (input.startDate && input.dueDate && input.dueDate < input.startDate) throw new ToolError("L'échéance est avant le début.");
       const created = createIssue(c.p.id, input as IssueInput, me.id);
-      emit({ type: "issue", projectId: c.p.id, issueId: created.id }, "issue.created", { project: { id: c.p.id, key: c.p.key, name: c.p.name }, issue: created });
+      emit({ type: "issue", projectId: c.p.id, issueId: created.id }, "issue.created", { project: { id: c.p.id, key: c.p.key, name: c.p.name }, issue: created }, me.id);
       return c.show(created, true);
     },
   },
@@ -421,7 +421,7 @@ export const TOOLS: Tool[] = [
       const changed = Object.keys(patch);
       if (!changed.length) throw new ToolError("Rien à changer : donne au moins un champ.");
       const updated = updateIssue(cur.id, patch)!;
-      emit({ type: "issue", projectId: updated.projectId, issueId: updated.id }, "issue.updated", { issue: updated, changed, previous: Object.fromEntries(changed.map((k) => [k, cur[k as keyof Issue]])) });
+      emit({ type: "issue", projectId: updated.projectId, issueId: updated.id }, "issue.updated", { issue: updated, changed, previous: Object.fromEntries(changed.map((k) => [k, cur[k as keyof Issue]])) }, me.id);
       return c.show(updated, true);
     },
   },
@@ -437,7 +437,7 @@ export const TOOLS: Tool[] = [
       if (!text) throw new ToolError("Le commentaire est vide.");
       if (text.length > MAX_COMMENT) throw new ToolError(`Commentaire trop long (${MAX_COMMENT} caractères au plus).`);
       const comment = addComment(i.id, me.id, text);
-      emit({ type: "issue", projectId: i.projectId, issueId: i.id }, "issue.commented", { issue: { id: i.id, ref: i.ref, title: i.title }, comment, author: { id: me.id, name: me.name } });
+      emit({ type: "issue", projectId: i.projectId, issueId: i.id }, "issue.commented", { issue: { id: i.id, ref: i.ref, title: i.title }, comment, author: { id: me.id, name: me.name } }, me.id);
       return { ok: true, issue: i.ref, commentId: comment.id };
     },
   },

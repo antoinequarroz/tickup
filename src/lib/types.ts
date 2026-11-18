@@ -1,7 +1,10 @@
 export type Role = "admin" | "member";
 
 /** `agent`: an AI agent (Claude, Alfred…) that works through the MCP server or the API with its own key. */
-export type User = { id: string; name: string; email: string; role: Role; createdAt: string; agent: boolean };
+export type User = { id: string; name: string; email: string; role: Role; createdAt: string; agent: boolean;
+  /** Also wants notifications by e-mail (off by default). */
+  notifyEmail: boolean;
+};
 
 /** An agent's key, as Réglages shows it (never the key itself). */
 export type ApiToken = { id: string; name: string; prefix: string; userId: string; source: "manual" | "oauth"; createdAt: string; lastUsedAt: string | null };
@@ -135,7 +138,7 @@ export type ModuleInfo = {
 };
 
 /** Which links to the rest of the suite are configured (never the secrets themselves). */
-export type Integrations = { apiToken: boolean; webhook: boolean; github: boolean; compte: boolean };
+export type Integrations = { apiToken: boolean; webhook: boolean; github: boolean; compte: boolean; email: boolean };
 
 /** A pull request, a commit or a branch on GitHub that names a ticket (WEB-12). */
 export type GithubLink = {
@@ -154,7 +157,21 @@ export type GithubLink = {
   updatedAt: string;
 };
 
-export type AppState = { me: User; users: User[]; projects: Project[]; modules: ModuleInfo[]; integrations: Integrations };
+export type AppState = { me: User; users: User[]; projects: Project[]; modules: ModuleInfo[]; integrations: Integrations; unreadNotifications: number };
+
+export type NotificationKind = "assigned" | "mentioned" | "status" | "due";
+
+/** Something that concerns me, in the bell. */
+export type Notification = {
+  id: string;
+  kind: NotificationKind;
+  issue: { id: string; ref: string; title: string; projectKey: string };
+  actor: { id: string; name: string } | null;
+  /** status: { from, to } status names. mentioned: { excerpt }. due: { dueDate }. */
+  data: Record<string, string>;
+  createdAt: string;
+  readAt: string | null;
+};
 
 /** What the server pushes over /api/events. Views reload what they show when it concerns them. */
-export type ServerEvent = { type: "project"; projectId: string } | { type: "issue"; projectId: string; issueId: string } | { type: "refresh" };
+export type ServerEvent = { type: "project"; projectId: string } | { type: "issue"; projectId: string; issueId: string } | { type: "refresh" } | { type: "notifications" };

@@ -18,7 +18,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 }
 
 export async function PATCH(req: Request, { params }: Ctx) {
-  if (!(await currentUser())) return unauthorized();
+  const me = await currentUser();
+  if (!me) return unauthorized();
   const cur = getIssue((await params).id);
   if (!cur) return fail("Ticket introuvable", 404);
   const patch = readIssue(await body(req), cur.projectId, { creating: false, issueId: cur.id });
@@ -31,7 +32,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const live = { type: "issue", projectId: issue.projectId, issueId: issue.id } as const;
   // A drag inside a column only changes the order: open tabs follow, the rest of the suite is not told.
   if (!changed.length) publish(live, "all");
-  else emit(live, "issue.updated", { issue, changed, previous: Object.fromEntries(changed.map((k) => [k, cur[k as keyof typeof cur]])) });
+  else emit(live, "issue.updated", { issue, changed, previous: Object.fromEntries(changed.map((k) => [k, cur[k as keyof typeof cur]])) }, me.id);
   return NextResponse.json(issue);
 }
 

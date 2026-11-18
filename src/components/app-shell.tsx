@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, FolderKanban, Inbox, LayoutGrid, Map as MapIcon, Plus, Search, Settings, SquarePen } from "lucide-react";
+import { ArrowUpRight, Bell, FolderKanban, Inbox, LayoutGrid, Map as MapIcon, Plus, Search, Settings, SquarePen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -15,6 +15,7 @@ import { ModulePicto } from "./module-icon";
 import { Avatar, Kbd, primaryClass } from "./ui";
 
 const NAV = [
+  { href: "/notifications", label: "Notifications", Icon: Bell },
   { href: "/my", label: "Mes tickets", Icon: Inbox },
   { href: "/projects", label: "Projets", Icon: FolderKanban },
   { href: "/roadmap", label: "Roadmap", Icon: MapIcon },
@@ -69,7 +70,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function Sidebar() {
   const pathname = usePathname();
-  const { me, projects, modules, setCommandOpen, setNewIssue, setNewProject } = useApp();
+  const { me, projects, modules, setCommandOpen, setNewIssue, setNewProject, unreadNotifications } = useApp();
   const linked = modules.filter((m) => m.status === "linked");
   const open = projects.filter((p) => !p.archived);
   const current = /^\/p\/([^/]+)/.exec(pathname)?.[1]?.toUpperCase();
@@ -103,6 +104,7 @@ function Sidebar() {
             >
               <Icon className={cn("size-4", active ? "text-ink" : "text-ink-3")} strokeWidth={2} />
               {label}
+              {href === "/notifications" && unreadNotifications > 0 && <UnreadBadge count={unreadNotifications} className="ml-auto" />}
             </Link>
           );
         })}
@@ -166,6 +168,15 @@ function Sidebar() {
   );
 }
 
+/** How many notifications are unread, on the bell. */
+function UnreadBadge({ count, className }: { count: number; className?: string }) {
+  return (
+    <span aria-label={`${count} non lue${count > 1 ? "s" : ""}`} className={cn("flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 font-mono text-[10.5px] font-semibold text-accent-ink", className)}>
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 function SectionTitle({ children, onAdd, addLabel }: { children: React.ReactNode; onAdd?: () => void; addLabel?: string }) {
   return (
     <div className="mt-4 flex shrink-0 items-center justify-between px-2 pb-1.5 first:mt-1">
@@ -181,13 +192,14 @@ function SectionTitle({ children, onAdd, addLabel }: { children: React.ReactNode
 
 function MobileBar() {
   const pathname = usePathname();
-  const { setCommandOpen, setNewIssue } = useApp();
+  const { setCommandOpen, setNewIssue, unreadNotifications } = useApp();
   return (
     <div className="flex items-center gap-1 border-b border-line px-3 py-2 md:hidden">
       <Logo className="mr-1 size-6" />
       {NAV.map(({ href, label, Icon }) => (
-        <Link key={href} href={href} aria-label={label} className={cn("flex size-9 items-center justify-center rounded-lg", pathname.startsWith(href) ? "bg-surface text-ink shadow-card" : "text-ink-3")}>
+        <Link key={href} href={href} aria-label={label} className={cn("relative flex size-9 items-center justify-center rounded-lg", pathname.startsWith(href) ? "bg-surface text-ink shadow-card" : "text-ink-3")}>
           <Icon className="size-[18px]" />
+          {href === "/notifications" && unreadNotifications > 0 && <UnreadBadge count={unreadNotifications} className="absolute -top-0.5 -right-0.5" />}
         </Link>
       ))}
       <button onClick={() => setCommandOpen(true)} aria-label="Rechercher" className="ml-auto flex size-9 items-center justify-center rounded-lg text-ink-3">
