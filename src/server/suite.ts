@@ -19,6 +19,7 @@ export type SuiteEvent =
   | "issue.updated"
   | "issue.deleted"
   | "issue.commented"
+  | "comment.updated"
   | "epic.created"
   | "epic.updated"
   | "epic.deleted";
@@ -28,7 +29,7 @@ const validUrl = (value: string | undefined) => (value && /^https?:\/\//.test(va
 /** `actorId`: who made the change (null: GitHub or unknown), so ticket events notify the right people. */
 export function emit(live: ServerEvent, event: SuiteEvent, data: Record<string, unknown>, actorId: string | null = null) {
   publish(live, "all");
-  if (event === "issue.created" || event === "issue.updated" || event === "issue.commented") notifyFromEvent(event, data, actorId);
+  if (event === "issue.created" || event === "issue.updated" || event === "issue.commented" || event === "comment.updated") notifyFromEvent(event, data, actorId);
   const url = validUrl(process.env.SUITE_WEBHOOK_URL);
   if (!url) return;
   const headers: Record<string, string> = { "Content-Type": "application/json", "User-Agent": "TickUp" };

@@ -91,7 +91,8 @@ export type Issue = {
   subDone: number;
 };
 
-export type Comment = { id: string; issueId: string; userId: string | null; body: string; createdAt: string };
+/** `editedAt`: when its author last corrected it, null if never. */
+export type Comment = { id: string; issueId: string; userId: string | null; body: string; createdAt: string; editedAt: string | null };
 
 export type SprintState = "planned" | "active" | "done";
 

@@ -668,6 +668,18 @@ function Comments({ issueId, meId }: { issueId: string; meId: string }) {
     }
   };
 
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const save = async () => {
+    if (!editing || !editing.text.trim()) return;
+    try {
+      await api(`/api/comments/${editing.id}`, { method: "PATCH", json: { body: editing.text } });
+      setEditing(null);
+      await load();
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
+
   const remove = async (id: string) => {
     try {
       await api(`/api/comments/${id}`, { method: "DELETE" });
@@ -689,13 +701,50 @@ function Comments({ issueId, meId }: { issueId: string; meId: string }) {
               <div className="min-w-0 flex-1">
                 <p className="text-[12.5px]">
                   <span className="font-medium">{who?.name ?? "Ancien membre"}</span> <span className="text-ink-3">{relative(c.createdAt)}</span>
+                  {c.editedAt && (
+                    <span className="text-ink-3" title={`Modifié ${relative(c.editedAt)}`}>
+                      {" "}
+                      · modifié
+                    </span>
+                  )}
+                  {c.userId === meId && editing?.id !== c.id && (
+                    <button onClick={() => setEditing({ id: c.id, text: c.body })} className="ml-2 text-[11.5px] text-ink-3 opacity-0 group-hover:opacity-100 hover:text-ink focus-visible:opacity-100">
+                      Modifier
+                    </button>
+                  )}
                   {(c.userId === meId || me.role === "admin") && (
                     <button onClick={() => remove(c.id)} className="ml-2 text-[11.5px] text-ink-3 opacity-0 group-hover:opacity-100 hover:text-ink">
                       Supprimer
                     </button>
                   )}
                 </p>
-                <Markdown text={c.body} className="mt-0.5 text-[13.5px] leading-relaxed text-ink-2" />
+                {editing?.id === c.id ? (
+                  <div className="mt-1 rounded-xl border border-line-strong bg-surface p-2 focus-within:border-ink/40">
+                    <textarea
+                      autoFocus
+                      value={editing.text}
+                      onChange={(e) => setEditing({ id: c.id, text: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void save();
+                        if (e.key === "Escape") setEditing(null);
+                      }}
+                      rows={Math.min(12, Math.max(2, editing.text.split("\n").length))}
+                      maxLength={10000}
+                      aria-label="Modifier le commentaire"
+                      className="w-full resize-none bg-transparent px-1 text-[13.5px] outline-none"
+                    />
+                    <div className="flex justify-end gap-1.5">
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                        Annuler
+                      </Button>
+                      <Button size="sm" variant="primary" disabled={!editing.text.trim() || editing.text === c.body} onClick={() => void save()}>
+                        Enregistrer
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Markdown text={c.body} className="mt-0.5 text-[13.5px] leading-relaxed text-ink-2" />
+                )}
               </div>
             </div>
           );

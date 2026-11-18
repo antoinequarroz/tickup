@@ -24,6 +24,6 @@ export function GET() {
       epics: "POST /api/projects/{KEY}/epics, PATCH|DELETE /api/epics/{id}",
       mine: "GET /api/my-issues",
     },
-    events: ["project.created", "project.updated", "project.deleted", "issue.created", "issue.updated", "issue.deleted", "issue.commented", "epic.created", "epic.updated", "epic.deleted"],
+    events: ["project.created", "project.updated", "project.deleted", "issue.created", "issue.updated", "issue.deleted", "issue.commented", "comment.updated", "epic.created", "epic.updated", "epic.deleted"],
   });
 }

@@ -193,6 +193,8 @@ export function db() {
   addColumn("users", "agent", "integer not null default 0");
   // Notifications by e-mail too, when the person asked for it (never by default).
   addColumn("users", "notify_email", "integer not null default 0");
+  // When a comment was last corrected by its author (null: never).
+  addColumn("comments", "edited_at", "text");
   conn.exec(`
     create table if not exists issue_watchers (
       issue_id text not null references issues (id) on delete cascade,
@@ -708,8 +710,8 @@ export const deleteIssue = (id: string) => db().prepare("delete from issues wher
 
 // ---- Comments
 
-type CommentRow = { id: string; issue_id: string; user_id: string | null; body: string; created_at: string };
-const toComment = (r: CommentRow): Comment => ({ id: r.id, issueId: r.issue_id, userId: r.user_id, body: r.body, createdAt: r.created_at });
+type CommentRow = { id: string; issue_id: string; user_id: string | null; body: string; created_at: string; edited_at: string | null };
+const toComment = (r: CommentRow): Comment => ({ id: r.id, issueId: r.issue_id, userId: r.user_id, body: r.body, createdAt: r.created_at, editedAt: r.edited_at });
 
 export const listComments = (issueId: string) => (db().prepare("select * from comments where issue_id = ? order by created_at").all(issueId) as CommentRow[]).map(toComment);
 
@@ -723,6 +725,12 @@ export function getComment(id: string) {
   const r = db().prepare("select * from comments where id = ?").get(id) as CommentRow | undefined;
   return r ? toComment(r) : null;
 }
+/** Corrects a comment's text; it then shows "modifié". */
+export function updateComment(id: string, body: string): Comment | null {
+  db().prepare("update comments set body = ?, edited_at = ? where id = ?").run(body, now(), id);
+  return getComment(id);
+}
+
 export const deleteComment = (id: string) => db().prepare("delete from comments where id = ?").run(id);
 
 // ---- Dependencies between tickets
