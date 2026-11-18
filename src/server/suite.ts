@@ -1,6 +1,7 @@
 import "server-only";
 import type { ServerEvent } from "@/lib/types";
 import { publish } from "./events";
+import { notifyFromEvent } from "./notify";
 
 /**
  * How TickUp talks to the rest of the suite.
@@ -24,8 +25,10 @@ export type SuiteEvent =
 
 const validUrl = (value: string | undefined) => (value && /^https?:\/\//.test(value) ? value : undefined);
 
-export function emit(live: ServerEvent, event: SuiteEvent, data: Record<string, unknown>) {
+/** `actorId`: who made the change (null: GitHub or unknown), so ticket events notify the right people. */
+export function emit(live: ServerEvent, event: SuiteEvent, data: Record<string, unknown>, actorId: string | null = null) {
   publish(live, "all");
+  if (event === "issue.created" || event === "issue.updated" || event === "issue.commented") notifyFromEvent(event, data, actorId);
   const url = validUrl(process.env.SUITE_WEBHOOK_URL);
   if (!url) return;
   const headers: Record<string, string> = { "Content-Type": "application/json", "User-Agent": "TickUp" };

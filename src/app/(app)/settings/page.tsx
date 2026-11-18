@@ -25,6 +25,7 @@ export default function SettingsPage() {
         <div className="mx-auto flex max-w-[560px] flex-col gap-4">
           <Profile />
           <Appearance />
+          {!me.agent && <Notifications />}
           <Password />
           {me.role === "admin" && <Members />}
           <AgentKeys />
@@ -97,6 +98,48 @@ function Appearance() {
           </button>
         ))}
       </div>
+    </Card>
+  );
+}
+
+function Notifications() {
+  const { me, integrations, reload } = useApp();
+  const [busy, setBusy] = useState(false);
+  const set = async (email: boolean) => {
+    setBusy(true);
+    try {
+      await api("/api/me/notifications", { method: "PATCH", json: { email } });
+      await reload();
+      toast(email ? "Tu recevras aussi tes notifications par e-mail" : "Plus d'e-mails : les notifications restent dans TickUp");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const options = [
+    { email: false, label: "Dans TickUp" },
+    { email: true, label: "Aussi par e-mail" },
+  ];
+  return (
+    <Card className="flex flex-col gap-3">
+      <Title hint="Quand on t'attribue un ticket, qu'on te mentionne avec @, qu'un ticket que tu suis change de statut, et la veille d'une échéance.">Notifications</Title>
+      <div className="flex gap-1 self-start rounded-lg border border-line bg-surface-2 p-1">
+        {options.map((o) => {
+          const on = me.notifyEmail === o.email;
+          const disabled = busy || (o.email && !integrations.email && !me.notifyEmail);
+          return (
+            <button key={o.label} onClick={() => !on && set(o.email)} disabled={disabled} aria-pressed={on} className={cn("press flex h-8 items-center rounded-md px-3 text-[13px] disabled:opacity-40", on ? "bg-surface font-medium text-ink shadow-card" : "text-ink-2 hover:text-ink")}>
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      {integrations.email ? (
+        me.notifyEmail && <p className="text-[12px] text-ink-3">Les e-mails partent à {me.email}.</p>
+      ) : (
+        <p className="text-[12px] text-ink-3">L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré sur ce serveur (SMTP_URL et MAIL_FROM).</p>
+      )}
     </Card>
   );
 }
