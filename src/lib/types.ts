@@ -1,6 +1,10 @@
 export type Role = "admin" | "member";
 
-export type User = { id: string; name: string; email: string; role: Role; createdAt: string };
+/** `agent`: an AI agent (Claude, Alfred…) that works through the MCP server or the API with its own key. */
+export type User = { id: string; name: string; email: string; role: Role; createdAt: string; agent: boolean };
+
+/** An agent's key, as Réglages shows it (never the key itself). */
+export type ApiToken = { id: string; name: string; prefix: string; userId: string; source: "manual" | "oauth"; createdAt: string; lastUsedAt: string | null };
 
 /** The kind of project, chosen at creation: it sets the first statuses, types and labels. */
 export type TemplateId = "general" | "media" | "software";

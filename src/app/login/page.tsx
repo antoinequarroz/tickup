@@ -16,8 +16,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Where to go once signed in: a page of TickUp (an agent asking for access), else the projects. */
+  const [next, setNext] = useState("/projects");
 
   useEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get("next");
+    if (asked && /^\/(?![/\\])/.test(asked)) setNext(asked);
     // Sent back here by the Compte Postmelo when the sign-in did not go through.
     setError(new URLSearchParams(window.location.search).get("erreur") ?? "");
     api<{ needsSetup: boolean; compte?: boolean }>("/api/auth/status").then(
@@ -35,7 +39,7 @@ export default function LoginPage() {
     setError("");
     try {
       await api(setup ? "/api/auth/setup" : "/api/auth/login", { method: "POST", json: { name, email, password } });
-      window.location.href = "/projects";
+      window.location.href = next;
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -56,7 +60,7 @@ export default function LoginPage() {
               {error}
             </p>
           )}
-          <Button variant="primary" className="mt-6 w-full" onClick={() => (window.location.href = "/api/auth/compte/start")}>
+          <Button variant="primary" className="mt-6 w-full" onClick={() => (window.location.href = next === "/projects" ? "/api/auth/compte/start" : `/api/auth/compte/start?next=${encodeURIComponent(next)}`)}>
             Continuer avec mon Compte Postmelo
           </Button>
           {!setup && (

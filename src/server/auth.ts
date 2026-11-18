@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { cookies, headers } from "next/headers";
 import type { NextResponse } from "next/server";
 import type { User } from "@/lib/types";
+import { tokenUser } from "./agents";
 import { addSession, firstAdmin, removeSession, sessionUser } from "./db";
 
 export const SESSION_COOKIE = "tickup_session";
@@ -40,13 +41,30 @@ export function validApiToken(authorization: string | null | undefined) {
   return crypto.timingSafeEqual(a, b);
 }
 
-/** The signed-in person, or null. Every page and every API route starts here. With API_TOKEN, the first admin. */
+/**
+ * Who a "Authorization: Bearer …" header speaks for: an agent with its own key (made in Réglages, or
+ * by connecting Claude), or the first admin with the shared API_TOKEN. Null otherwise.
+ */
+export function bearerUser(authorization: string | null | undefined): User | null {
+  if (!authorization?.startsWith("Bearer ")) return null;
+  const agent = tokenUser(authorization.slice(7).trim());
+  if (agent) return agent;
+  return validApiToken(authorization) ? firstAdmin() : null;
+}
+
+/** The signed-in person, or null. Every page and every API route starts here. With a key, its agent (or the first admin for API_TOKEN). */
 export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (token) {
     const user = sessionUser(sha256(token));
     if (user) return user;
   }
-  if (validApiToken((await headers()).get("authorization"))) return firstAdmin();
-  return null;
+  return bearerUser((await headers()).get("authorization"));
+}
+
+/** The signed-in person, by session cookie only (pages a key must not reach, such as authorizing a connector). */
+export async function sessionPerson(): Promise<User | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const user = token ? sessionUser(sha256(token)) : null;
+  return user && !user.agent ? user : null;
 }

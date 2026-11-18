@@ -55,9 +55,19 @@ Trois liens, tous réglés dans `.env` (voir `.env.example`). L'état de chacun 
 
 Cordée liste TickUp dans ses modules. Il suffit de lui donner l'adresse : `TICKUP_URL=https://tickup.antoinequarroz.ch` dans le `.env` de Cordée. Dans l'autre sens, `CORDEE_URL`, `CAIRN_URL`, etc. dans le `.env` de TickUp affichent les autres outils dans sa barre de gauche.
 
+### Les agents IA (serveur MCP)
+
+TickUp a son propre serveur MCP à l'adresse `https://tickup.postmelo.ch/mcp` (Streamable HTTP, sans état). Claude, Alfred, Claude Code ou tout agent compatible MCP peut y lire les projets, chercher, créer, modifier, déplacer et commenter des tickets, créer des epics et des projets. Chaque agent a son propre compte (« Claude », « Alfred ») : ses tickets et ses commentaires portent son nom, et on peut lui assigner un ticket.
+
+- **Claude (claude.ai, appli bureau et mobile)** : Réglages › Connecteurs › Ajouter un connecteur personnalisé, adresse `https://tickup.postmelo.ch/mcp`. Claude ouvre TickUp, tu te connectes, tu cliques sur « Autoriser » : la clé est créée et transmise toute seule (OAuth 2.1 avec PKCE et inscription dynamique).
+- **Claude Code** : `claude mcp add --transport http tickup https://tickup.postmelo.ch/mcp` (même autorisation dans le navigateur), ou avec une clé : `--header "Authorization: Bearer tku_…"`.
+- **Autres agents et scripts** : Réglages › Agents IA › « Créer la clé », puis l'en-tête `Authorization: Bearer tku_…`. La même clé ouvre aussi l'API REST ci-dessous.
+
+Outils : `whoami`, `list_projects`, `get_project`, `list_issues`, `list_my_issues`, `get_issue`, `create_issue`, `update_issue`, `add_comment`, `link_issues`, `create_epic`, `update_epic`, `create_project`, `list_users`. Ils prennent des noms (statut « En cours » ou catégorie `done`, type, epic, étiquettes, personne ou `me`) plutôt que des identifiants. Réglages › Agents IA liste les clés, quand chacune a servi pour la dernière fois, et révoque celle qu'on veut.
+
 ### 2. L'API (les autres outils écrivent dans TickUp)
 
-Avec `API_TOKEN` défini, n'importe quel outil de la suite, Hermes, Claude Code ou un script peut lire et écrire, comme pour Cairn :
+Avec `API_TOKEN` défini (ou la clé d'un agent, voir plus haut), n'importe quel outil de la suite, Hermes, Claude Code ou un script peut lire et écrire, comme pour Cairn :
 
 ```bash
 # Créer un ticket

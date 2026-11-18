@@ -9,6 +9,8 @@ import { NextResponse, type NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return NextResponse.next();
   if (req.headers.get("authorization")?.startsWith("Bearer ")) return NextResponse.next();
+  // Called by AI agents and their servers, never with the cookie: the MCP server and the OAuth exchange.
+  if (/^\/api\/(mcp|oauth\/(register|token))$/.test(req.nextUrl.pathname)) return NextResponse.next();
   const site = req.headers.get("sec-fetch-site");
   const origin = req.headers.get("origin");
   let foreign = !!site && site !== "same-origin" && site !== "none";
