@@ -53,7 +53,7 @@ Trois liens, tous réglés dans `.env` (voir `.env.example`). L'état de chacun 
 
 ### 1. Dans Cordée
 
-Cordée liste TickUp dans ses modules. Il suffit de lui donner l'adresse : `TICKUP_URL=https://tickup.antoinequarroz.ch` dans le `.env` de Cordée. Dans l'autre sens, `CORDEE_URL`, `CAIRN_URL`, etc. dans le `.env` de TickUp affichent les autres outils dans sa barre de gauche.
+Cordée liste TickUp dans ses modules. Il suffit de lui donner l'adresse : `TICKUP_URL=https://tickup.postmelo.ch` dans le `.env` de Cordée. Dans l'autre sens, `CORDEE_URL`, `CAIRN_URL`, etc. dans le `.env` de TickUp affichent les autres outils dans sa barre de gauche.
 
 ### Les agents IA (serveur MCP)
 
@@ -71,12 +71,12 @@ Avec `API_TOKEN` défini (ou la clé d'un agent, voir plus haut), n'importe quel
 
 ```bash
 # Créer un ticket
-curl -X POST https://tickup.antoinequarroz.ch/api/projects/POD/issues \
+curl -X POST https://tickup.postmelo.ch/api/projects/POD/issues \
   -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
   -d '{"title": "Monter le teaser", "priority": 2}'
 
 # Lire un ticket, ses sous-tickets et ses commentaires
-curl https://tickup.antoinequarroz.ch/api/issues/POD-12 -H "Authorization: Bearer $API_TOKEN"
+curl https://tickup.postmelo.ch/api/issues/POD-12 -H "Authorization: Bearer $API_TOKEN"
 ```
 
 | Route | Rôle |
@@ -103,7 +103,7 @@ Avec `SUITE_WEBHOOK_URL`, chaque changement est envoyé en `POST` JSON à cette 
   "source": "tickup",
   "event": "issue.updated",
   "at": "2026-11-17T10:00:00.000Z",
-  "appUrl": "https://tickup.antoinequarroz.ch",
+  "appUrl": "https://tickup.postmelo.ch",
   "data": { "issue": { "ref": "POD-12", "title": "…" }, "changed": ["statusId"], "previous": { "statusId": "…" } }
 }
 ```

@@ -1,12 +1,12 @@
 # Mettre TickUp en ligne sur le VPS
 
-À la fin de ce guide : **https://tickup.antoinequarroz.ch**. Même principe que Cairn et Cordée : TickUp tourne dans Docker et passe par le Caddy de Metricove, qui tient déjà les ports 80 et 443.
+À la fin de ce guide : **https://tickup.postmelo.ch**. Même principe que Cairn et Cordée : TickUp tourne dans Docker et passe par le Caddy de Metricove, qui tient déjà les ports 80 et 443.
 
 Ce guide n'a pas encore été déroulé sur le VPS : les commandes sont celles de Cairn, adaptées.
 
 ## 1. DNS
 
-Un enregistrement **A** `tickup` qui pointe vers l'IP du VPS. Pour vérifier : `dig +short tickup.antoinequarroz.ch`.
+Un enregistrement **A** `tickup` qui pointe vers l'IP du VPS. Pour vérifier : `dig +short tickup.postmelo.ch`.
 
 ## 2. Installer TickUp
 
@@ -23,7 +23,7 @@ Remplis au moins :
 API_TOKEN=<openssl rand -hex 32>
 # Facultatif : relier GitHub (voir « Relier GitHub » dans le README)
 GITHUB_WEBHOOK_SECRET=<openssl rand -hex 32>
-APP_URL=https://tickup.antoinequarroz.ch
+APP_URL=https://tickup.postmelo.ch
 CORDEE_URL=https://cordee.antoinequarroz.ch
 CAIRN_URL=https://cairn.antoinequarroz.ch
 ```
@@ -42,7 +42,7 @@ TickUp écoute maintenant sur `172.17.0.1:3040` : joignable par les autres conte
 Dans `~/metricove/deploy/Caddyfile`, ajoute :
 
 ```caddy
-tickup.antoinequarroz.ch {
+tickup.postmelo.ch {
 	encode zstd gzip
 	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy host.docker.internal:3040 {
@@ -62,9 +62,9 @@ Si Caddy répond « 502 » : `host.docker.internal` ne correspond pas à `172.17
 
 ## 4. Premier lancement
 
-Ouvre https://tickup.antoinequarroz.ch **tout de suite** et crée ton compte : la première personne qui arrive devient administratrice. Ajoute ensuite les membres dans Réglages.
+Ouvre https://tickup.postmelo.ch **tout de suite** et crée ton compte : la première personne qui arrive devient administratrice. Ajoute ensuite les membres dans Réglages.
 
-Dans le `.env` de Cordée, ajoute `TICKUP_URL=https://tickup.antoinequarroz.ch` pour que TickUp apparaisse dans ses modules.
+Dans le `.env` de Cordée, ajoute `TICKUP_URL=https://tickup.postmelo.ch` pour que TickUp apparaisse dans ses modules.
 
 ## 5. Sauvegardes
 
