@@ -55,6 +55,12 @@ describe("notifications", () => {
     expect(listNotifications(bob.id)[0]).toMatchObject({ kind: "assigned", actor: { name: "Ana Rossi" }, issue: { ref: "WEB-1", projectKey: "WEB" } });
     expect(publish).toHaveBeenCalledWith({ type: "notifications" }, [bob.id]);
 
+    // Saving the same assignee again is not a new assignment, even once read.
+    markRead(bob.id, "all");
+    change(issue.id, { assigneeId: bob.id }, ana.id);
+    expect(listNotifications(bob.id)).toHaveLength(1);
+    expect(unreadCount(bob.id)).toBe(0);
+
     // Ana takes it herself: nothing for her.
     change(issue.id, { assigneeId: ana.id }, ana.id);
     expect(unreadCount(ana.id)).toBe(0);
@@ -105,6 +111,7 @@ describe("notifications", () => {
     expect(mentionedUsers("@ana", users)).toEqual([]);
     expect(mentionedUsers("@Ana Silva et @ana rossi", users).map((u) => u.id).sort()).toEqual([ana.id, ann.id].sort());
     expect(mentionedUsers("@Bobby", users)).toEqual([]);
+    expect(mentionedUsers("@Bob-Marie", users)).toEqual([]);
     expect(mentionedUsers("bob@exemple.ch", users)).toEqual([]);
   });
 

@@ -57,7 +57,7 @@ export function mentionedUsers(text: string, users: User[]): User[] {
     return firstNames.get(first.toLowerCase()) === 1 && first !== full ? [full, first] : [full];
   };
   // Not inside an e-mail address (ana@exemple.ch), and the whole name (not @Anabelle for Ana).
-  return users.filter((u) => u.name.trim() && names(u).some((n) => new RegExp(`(^|[^\\p{L}\\p{N}_.])@${escape(n)}(?![\\p{L}\\p{N}_])`, "iu").test(text)));
+  return users.filter((u) => u.name.trim() && names(u).some((n) => new RegExp(`(^|[^\\p{L}\\p{N}_.])@${escape(n)}(?![\\p{L}\\p{N}_-])`, "iu").test(text)));
 }
 
 // ---- Sending
@@ -101,13 +101,15 @@ export function notifyFromEvent(event: string, data: Record<string, unknown>, ac
       const issue = data.issue as Issue;
       const changed = (data.changed as string[] | undefined) ?? [];
       const previous = (data.previous as Record<string, unknown> | undefined) ?? {};
-      if (changed.includes("assigneeId") && issue.assigneeId) deliver(issue.assigneeId, issue, "assigned", actorId, {});
+      // Saving the same assignee again (the picker, an agent's repeated call) is not a new assignment.
+      const reassigned = changed.includes("assigneeId") && !!issue.assigneeId && previous.assigneeId !== issue.assigneeId;
+      if (reassigned && issue.assigneeId) deliver(issue.assigneeId, issue, "assigned", actorId, {});
       if (changed.includes("statusId") && previous.statusId !== issue.statusId) {
         const from = statusName(previous.statusId);
         const to = statusName(issue.statusId);
         const extra: Record<string, string> = data.via === "github" ? { via: "github" } : {};
         // The new assignee already got "assigned" for this change: one notification is enough.
-        for (const userId of watchers(issue)) if (!(changed.includes("assigneeId") && userId === issue.assigneeId)) deliver(userId, issue, "status", actorId, { from, to, ...extra });
+        for (const userId of watchers(issue)) if (!(reassigned && userId === issue.assigneeId)) deliver(userId, issue, "status", actorId, { from, to, ...extra });
       }
     } else if (event === "issue.commented") {
       const issue = getIssue((data.issue as { id: string }).id);
