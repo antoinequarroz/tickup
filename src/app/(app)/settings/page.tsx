@@ -3,6 +3,7 @@
 import { LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AgentKeys } from "@/components/agent-keys";
 import { LinearImport } from "@/components/linear-import";
 import { Avatar, Button, Card, Field, inputClass, PageHeader } from "@/components/ui";
 import { useApp } from "@/lib/store";
@@ -26,6 +27,7 @@ export default function SettingsPage() {
           <Appearance />
           <Password />
           {me.role === "admin" && <Members />}
+          <AgentKeys />
           {me.role === "admin" && <LinearImport />}
           <Session />
         </div>
@@ -165,7 +167,7 @@ function Members() {
     <Card className="flex flex-col gap-4">
       <Title hint="Chaque membre voit tous les projets et peut y créer des tickets.">Membres</Title>
       <ul className="flex flex-col gap-2">
-        {users.map((u) => (
+        {users.filter((u) => !u.agent).map((u) => (
           <li key={u.id} className="flex items-center gap-2.5">
             <Avatar id={u.id} name={u.name} />
             <span className="min-w-0 flex-1">

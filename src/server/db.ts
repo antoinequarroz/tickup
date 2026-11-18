@@ -144,6 +144,37 @@ export function db() {
       unique (issue_id, kind, repo, ref)
     );
     create index if not exists github_links_ref on github_links (kind, repo, ref);
+    -- Keys of the AI agents (MCP and REST). The table keeps only the SHA-256 of each key.
+    create table if not exists api_tokens (
+      id text primary key,
+      name text not null,
+      token_hash text not null unique,
+      -- The first characters, to tell keys apart in Réglages.
+      prefix text not null,
+      -- Who the agent acts as: its own account (users.agent = 1), created with the key.
+      user_id text not null references users (id) on delete cascade,
+      created_by text references users (id) on delete set null,
+      -- "manual" (made in Réglages) or "oauth" (a connector such as Claude signed in).
+      source text not null default 'manual',
+      created_at text not null,
+      last_used_at text
+    );
+    -- Connectors that registered themselves (OAuth dynamic client registration, as Claude does).
+    create table if not exists oauth_clients (
+      id text primary key,
+      name text not null,
+      redirect_uris text not null,
+      created_at text not null
+    );
+    create table if not exists oauth_codes (
+      code_hash text primary key,
+      client_id text not null references oauth_clients (id) on delete cascade,
+      user_id text not null references users (id) on delete cascade,
+      redirect_uri text not null,
+      code_challenge text not null,
+      agent_name text not null,
+      expires_at text not null
+    );
   `);
   // Columns added after the first release: an existing database gets them here, once.
   const addColumn = (table: string, column: string, definition: string) => {
@@ -158,6 +189,8 @@ export function db() {
   addColumn("epics", "external_ref", "text");
   addColumn("projects", "external_ref", "text");
   addColumn("sprints", "external_ref", "text");
+  // An AI agent's account: it never signs in, it acts through its API key.
+  addColumn("users", "agent", "integer not null default 0");
   conn.exec("create index if not exists issues_sprint on issues (sprint_id); create index if not exists issues_external on issues (external_ref)");
   globalForDb.__tickupDb = { dir, conn };
   return conn;
@@ -169,8 +202,8 @@ const tx = <T>(fn: () => T) => db().transaction(fn)();
 
 // ---- Users
 
-type UserRow = { id: string; email: string; name: string; role: Role; salt: string; password_hash: string; created_at: string };
-const toUser = (r: UserRow): User => ({ id: r.id, email: r.email, name: r.name, role: r.role, createdAt: r.created_at });
+type UserRow = { id: string; email: string; name: string; role: Role; salt: string; password_hash: string; created_at: string; agent: number };
+export const toUser = (r: UserRow): User => ({ id: r.id, email: r.email, name: r.name, role: r.role, createdAt: r.created_at, agent: !!r.agent });
 
 export const countUsers = () => (db().prepare("select count(*) as n from users").get() as { n: number }).n;
 
@@ -183,7 +216,7 @@ export function getUser(id: string): User | null {
 
 /** The first administrator: the account scripts act as when they use API_TOKEN. */
 export function firstAdmin(): User | null {
-  const r = db().prepare("select * from users where role = 'admin' order by created_at limit 1").get() as UserRow | undefined;
+  const r = db().prepare("select * from users where role = 'admin' and agent = 0 order by created_at limit 1").get() as UserRow | undefined;
   return r ? toUser(r) : null;
 }
 

@@ -33,3 +33,15 @@ export function dateField(value: unknown): string | null | undefined {
   const d = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value ? value : undefined;
 }
+
+/** The public address of TickUp (APP_URL, else what the proxy says), without a trailing slash. */
+export function publicOrigin(req: Request): string {
+  if (/^https?:\/\//.test(process.env.APP_URL ?? "")) return process.env.APP_URL!.replace(/\/+$/, "");
+  const h = req.headers;
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? new URL(req.url).host;
+  const proto = h.get("x-forwarded-proto")?.split(",")[0].trim() ?? new URL(req.url).protocol.replace(":", "");
+  return `${proto}://${host}`;
+}
+
+/** A path inside TickUp to go back to after signing in ("/oauth/authorize?…"), never another site. */
+export const safeNext = (value: unknown) => (typeof value === "string" && /^\/(?![/\\])/.test(value) && value.length < 4000 ? value : null);
