@@ -103,6 +103,24 @@ describe("notifications", () => {
     expect(listNotifications(bob.id)[0]).toMatchObject({ kind: "status" });
   });
 
+  it("corriger un commentaire ne prévient que les personnes nouvellement mentionnées", () => {
+    const { ana, bob, project } = setup();
+    const cid = store.createUser({ ...account("Cid Roth"), role: "member" })!;
+    const issue = store.createIssue(project.id, { title: "Logo" }, ana.id);
+    const c = store.addComment(issue.id, ana.id, "@Bob regarde");
+    const fix = (body: string) => {
+      const prev = store.getComment(c.id)!.body;
+      const comment = store.updateComment(c.id, body)!;
+      emit(live(issue), "comment.updated", { issue: { id: issue.id, ref: issue.ref, title: issue.title }, comment, previousBody: prev }, ana.id);
+      return comment;
+    };
+    expect(fix("@Bob regarde, et @Cid aussi").editedAt).toEqual(expect.any(String));
+    expect(unreadCount(bob.id)).toBe(0);
+    expect(listNotifications(cid.id)[0]).toMatchObject({ kind: "mentioned" });
+    fix("@Bob @Cid regardez");
+    expect(unreadCount(cid.id)).toBe(1);
+  });
+
   it("reconnaît @Nom Complet, et le prénom seulement quand il est unique", () => {
     const { ana, bob } = setup();
     const ann = store.createUser({ ...account("Ana Silva"), role: "member" })!;

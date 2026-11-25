@@ -119,6 +119,16 @@ describe("serveur MCP", () => {
     const full = call(claude, "get_issue", { issue: "web-1" }).data;
     expect(full.comments[0]).toMatchObject({ author: "Claude", body: "PR fusionnée." });
     expect(full.subIssues.map((s: { ref: string }) => s.ref)).toEqual(["WEB-2"]);
+    expect(full.comments[0].editedAt).toBeUndefined();
+
+    // Corrects its own comment; never someone else's.
+    expect(call(claude, "edit_comment", { commentId: full.comments[0].id, body: "PR #3 fusionnée." }).data.ok).toBe(true);
+    const fixed = call(claude, "get_issue", { issue: "WEB-1" }).data.comments[0];
+    expect(fixed).toMatchObject({ body: "PR #3 fusionnée.", editedAt: expect.any(String) });
+    const ana = store.listUsers().find((u) => u.name === "Ana")!;
+    const hers = store.addComment(store.getIssue("WEB-1")!.id, ana.id, "Merci");
+    expect(call(claude, "edit_comment", { commentId: hers.id, body: "Piraté" }).isError).toBe(true);
+    expect(store.getComment(hers.id)!.body).toBe("Merci");
 
     expect(call(claude, "link_issues", { blocker: "WEB-2", blocked: "WEB-1" }).data.ok).toBe(true);
     expect(call(claude, "link_issues", { blocker: "WEB-1", blocked: "WEB-2" }).isError).toBe(true);

@@ -22,6 +22,8 @@ import {
   listSubIssues,
   listTypes,
   listUsers,
+  getComment,
+  updateComment,
   updateEpic,
   updateIssue,
   wouldBlockLoop,
@@ -348,7 +350,7 @@ export const TOOLS: Tool[] = [
       return {
         ...c.show(i, true),
         subIssues: listSubIssues(i.id).map((s) => ({ ref: s.ref, title: s.title, status: c.statuses.find((x) => x.id === s.statusId)?.name ?? null, assignee: who(s.assigneeId) })),
-        comments: listComments(i.id).map((m) => ({ id: m.id, author: who(m.userId), body: m.body, createdAt: m.createdAt })),
+        comments: listComments(i.id).map((m) => ({ id: m.id, author: who(m.userId), body: m.body, createdAt: m.createdAt, ...(m.editedAt ? { editedAt: m.editedAt } : {}) })),
         github: listGithubLinks(i.id).map((g) => ({ kind: g.kind, repo: g.repo, ref: g.ref, title: g.title, state: g.state, url: g.url })),
       };
     },
@@ -438,6 +440,26 @@ export const TOOLS: Tool[] = [
       if (text.length > MAX_COMMENT) throw new ToolError(`Commentaire trop long (${MAX_COMMENT} caractères au plus).`);
       const comment = addComment(i.id, me.id, text);
       emit({ type: "issue", projectId: i.projectId, issueId: i.id }, "issue.commented", { issue: { id: i.id, ref: i.ref, title: i.title }, comment, author: { id: me.id, name: me.name } }, me.id);
+      return { ok: true, issue: i.ref, commentId: comment.id };
+    },
+  },
+  {
+    name: "edit_comment",
+    title: "Corriger un commentaire",
+    description: "Remplace le texte (Markdown) d'un de tes commentaires ; il s'affiche alors « modifié ». commentId est donné par add_comment et get_issue.",
+    inputSchema: obj({ commentId: { type: "string" }, body: { type: "string", maxLength: MAX_COMMENT } }, ["commentId", "body"]),
+    annotations: { ...WRITE, idempotentHint: true },
+    run: (a, me) => {
+      const cur = getComment(str(a.commentId) ?? "");
+      if (!cur) throw new ToolError("Commentaire introuvable.");
+      if (cur.userId !== me.id) throw new ToolError("Tu ne peux corriger que tes propres commentaires.");
+      const text = str(a.body);
+      if (!text) throw new ToolError("Le commentaire est vide.");
+      if (text.length > MAX_COMMENT) throw new ToolError(`Commentaire trop long (${MAX_COMMENT} caractères au plus).`);
+      const i = getIssue(cur.issueId)!;
+      if (text === cur.body) return { ok: true, issue: i.ref, commentId: cur.id };
+      const comment = updateComment(cur.id, text)!;
+      emit({ type: "issue", projectId: i.projectId, issueId: i.id }, "comment.updated", { issue: { id: i.id, ref: i.ref, title: i.title }, comment, previousBody: cur.body, author: { id: me.id, name: me.name } }, me.id);
       return { ok: true, issue: i.ref, commentId: comment.id };
     },
   },

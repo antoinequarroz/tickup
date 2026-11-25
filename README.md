@@ -86,6 +86,7 @@ curl https://tickup.postmelo.ch/api/issues/POD-12 -H "Authorization: Bearer $API
 | `GET, POST /api/projects/{CLÉ}/issues` | Lister, créer un ticket (`parentId` pour un sous-ticket) |
 | `GET, PATCH, DELETE /api/issues/{id ou CLÉ-12}` | Un ticket |
 | `POST /api/issues/{id ou CLÉ-12}/comments` | Commenter |
+| `PATCH, DELETE /api/comments/{id}` | Corriger son commentaire (`{ "body": "…" }`, il s'affiche « modifié »), le supprimer |
 | `POST /api/projects/{CLÉ}/epics`, `PATCH, DELETE /api/epics/{id}` | Epics |
 | `GET /api/my-issues` | Mes tickets ouverts |
 | `GET /api/notifications`, `POST /api/notifications/read` | Mes notifications ; `{ "ids": [...] }` ou `{ "all": true }` pour les marquer lues |
@@ -108,7 +109,7 @@ Avec `SUITE_WEBHOOK_URL`, chaque changement est envoyé en `POST` JSON à cette 
 }
 ```
 
-Événements : `project.created|updated|deleted`, `issue.created|updated|deleted|commented`, `epic.created|updated|deleted`. L'envoi ne bloque jamais TickUp : si l'outil d'en face est éteint, l'événement est perdu.
+Événements : `project.created|updated|deleted`, `issue.created|updated|deleted|commented`, `comment.updated`, `epic.created|updated|deleted`. L'envoi ne bloque jamais TickUp : si l'outil d'en face est éteint, l'événement est perdu.
 
 ## Notifications
 

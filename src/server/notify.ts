@@ -117,6 +117,14 @@ export function notifyFromEvent(event: string, data: Record<string, unknown>, ac
       if (!issue) return;
       if (actorId) autoWatch(issue.id, actorId);
       for (const u of mentionedUsers(comment.body, listUsers())) deliver(u.id, issue, "mentioned", actorId, { excerpt: excerptOf(comment.body) });
+    } else if (event === "comment.updated") {
+      // A corrected comment only tells the people it names for the first time.
+      const issue = getIssue((data.issue as { id: string }).id);
+      const comment = data.comment as { body: string };
+      if (!issue) return;
+      const users = listUsers();
+      const before = new Set(mentionedUsers(typeof data.previousBody === "string" ? data.previousBody : "", users).map((u) => u.id));
+      for (const u of mentionedUsers(comment.body, users)) if (!before.has(u.id)) deliver(u.id, issue, "mentioned", actorId, { excerpt: excerptOf(comment.body) });
     }
   } catch (e) {
     // A notification that fails never makes the change itself fail.
